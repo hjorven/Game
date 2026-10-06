@@ -47,7 +47,7 @@ const Render = {
     this.drawFloor(ctx);
     this.drawWalls(ctx);
     this.drawPowerups(ctx);
-    if (S.mode === 'br' && S.state === 'playing') this.drawZone(ctx);
+    this.drawDrops(ctx);
     this.drawBullets(ctx);
     for (const r of Object.values(S.remotes)) this.drawPlayer(ctx, r, false);
     this.drawPlayer(ctx, S.me, true);
@@ -63,7 +63,7 @@ const Render = {
   },
 
   drawFloor(ctx) {
-    const W = CFG.WORLD.w, H = CFG.WORLD.h;
+    const W = World.w, H = World.h;
     ctx.fillStyle = '#10131a';
     ctx.fillRect(-600, -600, W + 1200, H + 1200);
     ctx.fillStyle = '#1b212b';
@@ -88,7 +88,7 @@ const Render = {
   },
 
   drawWalls(ctx) {
-    for (const w of WALLS) {
+    for (const w of World.walls) {
       ctx.fillStyle = 'rgba(0,0,0,0.35)';
       ctx.fillRect(w.x + 4, w.y + 6, w.w, w.h);
       ctx.fillStyle = '#2d3a4a';
@@ -107,7 +107,7 @@ const Render = {
       const info = PU_INFO[p.type];
       const bob = Math.sin(now / 320 + p.slot * 1.7) * 4;
       if (now < p.hiddenUntil) {
-        const frac = clamp(1 - (p.hiddenUntil - now) / CFG.PU_MS, 0, 1);
+        const frac = clamp(1 - (p.hiddenUntil - now) / puRespawnMs(p.type), 0, 1);
         ctx.globalAlpha = 0.4;
         ctx.strokeStyle = info.color;
         ctx.lineWidth = 2;
@@ -139,21 +139,29 @@ const Render = {
     }
   },
 
-  drawZone(ctx) {
-    const z = S.zone;
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(-800, -800, CFG.WORLD.w + 1600, CFG.WORLD.h + 1600);
-    ctx.arc(z.cx, z.cy, Math.max(1, z.r), 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(255,45,45,0.16)';
-    ctx.fill('evenodd');
-    ctx.strokeStyle = 'rgba(255,80,80,0.95)';
-    ctx.lineWidth = 5;
-    ctx.beginPath(); ctx.arc(z.cx, z.cy, Math.max(1, z.r), 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = 'rgba(255,255,255,0.35)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(z.cx, z.cy, Math.max(1, z.r) + 7, 0, Math.PI * 2); ctx.stroke();
-    ctx.restore();
+  // Vom Tod gefallene Waffen
+  drawDrops(ctx) {
+    const now = S.now;
+    for (const d of S.drops) {
+      const W = WEAPONS[d.w];
+      if (!W) continue;
+      const y = d.y + Math.sin(now / 320 + d.x * 0.01) * 4;
+      ctx.save();
+      ctx.shadowColor = W.color;
+      ctx.shadowBlur = 14;
+      ctx.fillStyle = '#141a22';
+      ctx.beginPath(); ctx.arc(d.x, y, 14, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur = 0;
+      ctx.strokeStyle = W.color;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+      ctx.restore();
+      ctx.fillStyle = W.color;
+      ctx.font = 'bold 9px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(W.short, d.x, y + 0.5);
+    }
   },
 
   drawBullets(ctx) {
@@ -203,8 +211,7 @@ const Render = {
       return;
     }
 
-    const tdm = S.mode === 'tdm' && S.state === 'playing';
-    const body = tdm ? TEAM_COLORS[(p.team || 0) % 2] : p.color;
+    const body = p.color;
     const W = WEAPONS[p.weapon] || WEAPONS.pistol;
     const barrel = 24 + (p.weapon === 'sniper' ? 15 : p.weapon === 'rocket' ? 9 : 0);
 
@@ -338,10 +345,10 @@ const Render = {
 
   drawMinimap(ctx) {
     const mw = Math.min(168, this.w * 0.34);
-    const mh = mw * (CFG.WORLD.h / CFG.WORLD.w);
+    const mh = mw * (World.h / World.w);
     const mx = this.w - mw - 12;
     const my = 54;
-    const sx = mw / CFG.WORLD.w, sy = mh / CFG.WORLD.h;
+    const sx = mw / World.w, sy = mh / World.h;
 
     ctx.save();
     ctx.fillStyle = 'rgba(8,10,14,0.8)';
@@ -356,15 +363,7 @@ const Render = {
     ctx.clip();
 
     ctx.fillStyle = 'rgba(255,255,255,0.12)';
-    for (const w of WALLS) ctx.fillRect(mx + w.x * sx, my + w.y * sy, Math.max(2, w.w * sx), Math.max(2, w.h * sy));
-
-    if (S.mode === 'br' && S.state === 'playing') {
-      ctx.strokeStyle = 'rgba(255,80,80,0.9)';
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.arc(mx + S.zone.cx * sx, my + S.zone.cy * sy, Math.max(2, S.zone.r * sx), 0, Math.PI * 2);
-      ctx.stroke();
-    }
+    for (const w of World.walls) ctx.fillRect(mx + w.x * sx, my + w.y * sy, Math.max(2, w.w * sx), Math.max(2, w.h * sy));
 
     for (const p of S.powerups) {
       if (S.now < p.hiddenUntil) continue;
@@ -381,10 +380,9 @@ const Render = {
       }
       ctx.globalAlpha = 1;
     };
-    const tdm = S.mode === 'tdm' && S.state === 'playing';
     for (const r of Object.values(S.remotes)) {
       if (!r.alive) continue;
-      drawDot(r.x, r.y, tdm ? TEAM_COLORS[(r.team || 0) % 2] : r.color, false, r.stale);
+      drawDot(r.x, r.y, r.color, false, r.stale);
     }
     if (S.me.alive) drawDot(S.me.x, S.me.y, '#ffffff', true, false);
 
@@ -427,8 +425,7 @@ const Render = {
   drawVignette(ctx) {
     const me = S.me;
     let inten = clamp(S.dmgFlash, 0, 1) * 0.75;
-    if (S.zoneWarn) inten = Math.max(inten, 0.45 + 0.15 * Math.sin(S.now / 150));
-    else if (S.state === 'playing' && me.alive && me.hp < 35) {
+    if (S.state === 'playing' && me.alive && me.hp < 35) {
       inten = Math.max(inten, (0.35 - me.hp / 100) * (0.7 + 0.3 * Math.sin(S.now / 200)));
     }
     if (inten <= 0.02) return;

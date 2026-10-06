@@ -71,7 +71,7 @@ const Input = {
       const k = e.key.toLowerCase();
       this.keys[k] = true;
       if (k === ' ') e.preventDefault();
-      if (k >= '1' && k <= '4' && this.onWeaponSlot) this.onWeaponSlot(+k);
+      if (k >= '1' && k <= '2' && this.onWeaponSlot) this.onWeaponSlot(+k);
       if (k === 'tab') { e.preventDefault(); UI.toggleBoard(); }
       if (k === 'm' && UI.toggleMute) UI.toggleMute();
     });

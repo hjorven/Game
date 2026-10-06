@@ -1,46 +1,39 @@
-// js/game.js — Spielzustand, Logik, Match-Regeln, Netzwerk-Handler
+// js/game.js — Spielzustand, Logik, Netzwerk-Handler
 'use strict';
 
 const S = {
-  state: 'lobby', // lobby | playing | ended
-  mode: 'ffa',
-  hostId: MY_ID,
-  startTs: 0,
-  endAt: 0,
-  teams: {},
-  results: null,
+  state: 'start', // start | playing
   me: {
     id: MY_ID, name: 'Spieler', color: '#fff',
     x: 600, y: 200, angle: 0,
     hp: CFG.MAX_HP, shield: 0, alive: true,
-    weapon: 'pistol', owned: { pistol: true },
-    kills: 0, deaths: 0, team: 0,
-    protectUntil: 0, shieldUntil: 0, speedUntil: 0, deadUntil: 0,
+    weapon: 'pistol',
+    slots: ['pistol', null],   // 2 Waffen-Slots (Slot 0 = Pistole, nie ersetzbar)
+    ammo: { pistol: Infinity },
+    kills: 0, deaths: 0,
+    protectUntil: 0, shieldUntil: 0, deadUntil: 0,
     lastShot: 0, muzzle: 0, flash: 0, dirty: false,
   },
   remotes: {},
   bullets: [],
   particles: [],
   powerups: [],
+  drops: [],        // Waffen-Drops vom Tod anderer Spieler
   seenExplosions: new Set(),
-  zone: { cx: CFG.WORLD.w / 2, cy: CFG.WORLD.h / 2, r: CFG.ZONE_R0, outside: false },
   cam: { x: 600, y: 200, scale: 1 },
   shake: 0, hitmarker: 0, dmgFlash: 0,
-  zoneWarn: false,
-  spectateId: null, spectateScan: 0,
   boardOpen: false,
-  lastNet: 0, lastSync: 0, now: 0,
+  lastNet: 0, now: 0,
 };
 
 // ---------------- Helfer ----------------
 
 function pointInWall(x, y) {
-  for (const w of WALLS) if (x >= w.x && x <= w.x + w.w && y >= w.y && y <= w.y + w.h) return true;
-  return false;
+  return World.inWall(x, y);
 }
 
 function resolveEntity(e) {
-  for (const w of WALLS) {
+  for (const w of World.nearWalls(e.x, e.y)) {
     const cx = clamp(e.x, w.x, w.x + w.w);
     const cy = clamp(e.y, w.y, w.y + w.h);
     const dx = e.x - cx, dy = e.y - cy;
@@ -71,16 +64,11 @@ function segCircle(x1, y1, x2, y2, cx, cy, r) {
   return px * px + py * py <= r * r;
 }
 
-function teamOf(id) {
-  if (id === MY_ID) return S.me.team;
-  const r = S.remotes[id];
-  return r ? r.team : 0;
-}
-
 function pickSpawn() {
   const me = S.me;
-  let best = SPAWNS[0], bestScore = -1;
-  for (const sp of SPAWNS) {
+  const list = World.spawns;
+  let best = list[0] || { x: World.w / 2, y: World.h / 2 }, bestScore = -1;
+  for (const sp of list) {
     let min = Infinity;
     for (const r of Object.values(S.remotes)) {
       if (!r.alive) continue;
@@ -127,9 +115,21 @@ function explosionFx(x, y, radius) {
 
 function tryFire(now) {
   const me = S.me;
-  if (S.state === 'ended' || !me.alive) return;
+  if (S.state !== 'playing' || !me.alive) return;
   const W = WEAPONS[me.weapon];
   if (now - me.lastShot < W.rate) return;
+  if (W.ammoMax) {
+    if ((me.ammo[W.key] || 0) <= 0) {
+      // Magazin leer → zur Pistole wechseln
+      me.weapon = 'pistol';
+      me.dirty = true;
+      UI.syncWeaponChips();
+      UI.setNotice('Keine Munition – Pistole!', 1400);
+      return;
+    }
+    me.ammo[W.key]--;
+    UI.syncWeaponChips();
+  }
   me.lastShot = now;
   me.muzzle = 0.07;
   const bx = me.x + Math.cos(me.angle) * (CFG.R + 10);
@@ -204,14 +204,14 @@ function updateBullets(dt) {
     }
 
     const wall = pointInWall(b.x, b.y);
-    const out = b.x < 0 || b.x > CFG.WORLD.w || b.y < 0 || b.y > CFG.WORLD.h;
+    const out = b.x < 0 || b.x > World.w || b.y < 0 || b.y > World.h;
     const hitMe = b.o !== MY_ID && me.alive && S.state === 'playing' &&
       segCircle(b.px, b.py, b.x, b.y, me.x, me.y, CFG.R + b.size * 0.5);
     const expired = b.life <= 0;
 
     if (wall || out || hitMe || expired) {
       if (b.splash && !S.seenExplosions.has(b.eid)) {
-        const ex = clamp(b.x, 2, CFG.WORLD.w - 2), ey = clamp(b.y, 2, CFG.WORLD.h - 2);
+        const ex = clamp(b.x, 2, World.w - 2), ey = clamp(b.y, 2, World.h - 2);
         triggerExplode(b, ex, ey);
       } else if (hitMe) {
         damageMe(b.dmg, b.o);
@@ -229,10 +229,7 @@ function updateBullets(dt) {
 function damageMe(dmg, fromId) {
   const me = S.me;
   if (S.state !== 'playing' || !me.alive || dmg <= 0) return;
-  if (fromId && fromId !== MY_ID) {
-    if (S.now < me.protectUntil) return;
-    if (S.mode === 'tdm' && teamOf(fromId) === me.team) return;
-  }
+  if (fromId && fromId !== MY_ID && S.now < me.protectUntil) return;
   let d = dmg;
   if (me.shield > 0 && S.now < me.shieldUntil) {
     const abs = Math.min(me.shield, d);
@@ -258,8 +255,15 @@ function die(killerId) {
   me.hp = 0;
   me.deaths++;
   me.deadUntil = S.now + CFG.RESPAWN_MS;
-  me.shield = 0; me.shieldUntil = 0; me.speedUntil = 0;
+  me.shield = 0; me.shieldUntil = 0;
   me.dirty = true;
+  // Waffe droppt am Todestort (Pistole bleibt, Zusatzwaffe geht an den Boden)
+  const dropW = me.weapon !== 'pistol' ? me.weapon : me.slots.find((w) => w && w !== 'pistol');
+  if (dropW) {
+    const d = { id: MY_ID + '-' + me.deaths, w: dropW, x: r1(me.x), y: r1(me.y) };
+    S.drops.push(d);
+    Net.send('drop', d);
+  }
   Net.send('death', { v: MY_ID, k: killerId || null });
   feedDeath(MY_ID, killerId);
   deathBurst(me.x, me.y, me.color);
@@ -274,7 +278,8 @@ function respawnMe() {
   me.alive = true;
   me.hp = CFG.MAX_HP;
   me.weapon = 'pistol';
-  me.owned = { pistol: true };
+  me.slots = ['pistol', null];
+  me.ammo = { pistol: Infinity };
   me.protectUntil = S.now + CFG.PROTECT_MS;
   me.deadUntil = 0;
   me.dirty = true;
@@ -286,20 +291,21 @@ function feedDeath(victimId, killerId) {
   const who = (id) => id === MY_ID ? { name: S.me.name, color: S.me.color }
     : (S.remotes[id] ? { name: S.remotes[id].name, color: S.remotes[id].color } : { name: 'Unbekannt', color: '#999' });
   const v = who(victimId);
-  if (!killerId) UI.addKillfeed({ v: v.name, vc: v.color, zone: true });
-  else if (killerId === victimId) UI.addKillfeed({ v: v.name, vc: v.color, self: true });
+  if (!killerId || killerId === victimId) UI.addKillfeed({ v: v.name, vc: v.color, self: true });
   else {
     const k = who(killerId);
     UI.addKillfeed({ k: k.name, kc: k.color, v: v.name, vc: v.color });
   }
 }
 
-// ---------------- Power-Ups ----------------
+// ---------------- Loot: Pickups & Waffen ----------------
 
-function puType(slot, respawns) { return PU_TYPES[(slot + respawns * 3) % PU_TYPES.length]; }
+function puRespawnMs(type) {
+  return type.startsWith('weapon_') ? CFG.WEAPON_MS : CFG.PU_MS;
+}
 
 function initPowerups() {
-  S.powerups = PU_SLOTS.map((s, i) => ({ slot: i, x: s.x, y: s.y, type: puType(i, 0), respawns: 0, hiddenUntil: 0 }));
+  S.powerups = World.puSlots.map((s, i) => ({ slot: i, x: s.x, y: s.y, type: s.type, respawns: 0, hiddenUntil: 0 }));
 }
 
 function adoptPU(pu) {
@@ -310,12 +316,12 @@ function adoptPU(pu) {
     if (row[1] === p.respawns && row[2] === p.hiddenUntil) continue;
     p.respawns = row[1];
     p.hiddenUntil = row[2];
-    p.type = puType(p.slot, p.respawns);
   }
 }
 
 function updatePowerups() {
   const me = S.me;
+  syncPickupSlots();
   if (!me.alive) return;
   for (const p of S.powerups) {
     if (S.now < p.hiddenUntil) continue;
@@ -324,63 +330,104 @@ function updatePowerups() {
       break;
     }
   }
+  // Waffen-Drops aufheben
+  for (let i = S.drops.length - 1; i >= 0; i--) {
+    const d = S.drops[i];
+    if (dist2(me.x, me.y, d.x, d.y) < (CFG.R + 20) * (CFG.R + 20)) {
+      if (giveWeapon(d.w)) {
+        S.drops.splice(i, 1);
+        Net.send('dropgone', { id: d.id });
+        sparkAt(d.x, d.y, WEAPONS[d.w].color, 12);
+        UI.setNotice(WEAPONS[d.w].name + ' aufgehoben!', 1400);
+        Sfx.play('pickup');
+        me.dirty = true;
+      }
+      break;
+    }
+  }
+}
+
+// Pickup-Liste an die (skalierende) Welt angleichen: Positionen & Typen folgen World.puSlots,
+// neue Slots kommen dazu, Respawn-Zustände bestehender Slots bleiben erhalten.
+function syncPickupSlots() {
+  const slots = World.puSlots;
+  if (S.powerups.length === slots.length && S._puSig === slots.length + ':' + slots[0].x) return;
+  S._puSig = slots.length + ':' + slots[0].x;
+  const next = slots.map((s, i) => {
+    const old = S.powerups[i];
+    if (old) { old.x = s.x; old.y = s.y; return old; }
+    return { slot: i, x: s.x, y: s.y, type: s.type, respawns: 0, hiddenUntil: 0 };
+  });
+  S.powerups = next;
 }
 
 function collectPowerup(p) {
   const info = PU_INFO[p.type];
-  applyPowerup(p.type);
+  applyPickup(p.type);
   sparkAt(p.x, p.y, info.color, 12);
   p.respawns++;
-  p.hiddenUntil = S.now + CFG.PU_MS;
-  p.type = puType(p.slot, p.respawns);
+  p.hiddenUntil = S.now + puRespawnMs(p.type);
   Net.send('pickup', { slot: p.slot, r: p.respawns, t: p.hiddenUntil });
   S.me.dirty = true;
   Sfx.play('pickup');
   UI.setNotice(info.label + ' eingesammelt!', 1300);
 }
 
-function applyPowerup(type) {
+function applyPickup(type) {
   const me = S.me;
   if (type === 'health') me.hp = Math.min(CFG.MAX_HP, me.hp + 50);
   else if (type === 'shield') { me.shield = CFG.MAX_SHIELD; me.shieldUntil = S.now + CFG.SHIELD_MS; }
-  else if (type === 'speed') me.speedUntil = S.now + CFG.SPEED_MS;
-  else if (type.startsWith('weapon_')) {
-    const w = type.slice(8);
-    if (WEAPONS[w]) { me.weapon = w; me.owned[w] = true; UI.syncWeaponChips(); }
+  else if (type === 'ammo') {
+    for (const w of me.slots) if (w && WEAPONS[w].ammoMax) me.ammo[w] = WEAPONS[w].ammoMax;
+    UI.syncWeaponChips();
+  } else if (type.startsWith('weapon_')) {
+    giveWeapon(type.slice(7));
   }
 }
 
-// ---------------- Zone (Battle Royale) ----------------
-
-function updateZone(dt) {
-  if (S.mode !== 'br' || S.state !== 'playing') { S.zoneWarn = false; return; }
-  const t = clamp((Date.now() - S.startTs) / MODES.br.zoneMs, 0, 1);
-  S.zone.r = CFG.ZONE_R0 * (1 - t);
+// Waffe in die 2 Slots einordnen: freien Slot füllen, sonst aktuelle ersetzen.
+// Gibt true zurück, wenn die Waffe neu aufgenommen wurde.
+function giveWeapon(w) {
   const me = S.me;
-  const outside = me.alive && dist(me.x, me.y, S.zone.cx, S.zone.cy) > S.zone.r;
-  S.zoneWarn = outside;
-  if (outside) {
-    const dps = CFG.ZONE_DPS0 + (CFG.ZONE_DPS1 - CFG.ZONE_DPS0) * t;
-    damageMe(dps * dt, null);
-  }
+  if (!WEAPONS[w]) return false;
+  if (me.slots.includes(w)) { me.weapon = w; me.dirty = true; UI.syncWeaponChips(); return false; }
+  const free = me.slots.indexOf(null);
+  const idx = free >= 0 ? free : me.slots.indexOf(me.weapon);
+  if (idx < 0) return false;
+  me.slots[idx] = w;
+  me.ammo[w] = WEAPONS[w].ammoMax || Infinity;
+  me.weapon = w;
+  me.dirty = true;
+  UI.syncWeaponChips();
+  return true;
 }
 
-// ---------------- Match-Ablauf ----------------
+// ---------------- Sync (Pickup-/Drop-Stand für Spät-Azmeister) ----------------
 
-function assignTeams() {
-  const ids = Net.roster().map((p) => p.id).sort();
-  const t = {};
-  ids.forEach((id, i) => { t[id] = i % 2; });
-  return t;
+function syncPayload() {
+  return {
+    to: null,
+    pu: S.powerups.map((p) => [p.slot, p.respawns, p.hiddenUntil]),
+    dr: S.drops.map((d) => [d.id, d.w, d.x, d.y]),
+  };
 }
 
-function resetForMatch() {
+function requestSync() {
+  Net.send('syncreq', { i: MY_ID });
+}
+
+// ---------------- Start ----------------
+
+function startGameState() {
   const me = S.me;
+  S.state = 'playing';
+  me.alive = true;
+  me.hp = CFG.MAX_HP;
+  me.shield = 0; me.shieldUntil = 0;
+  me.weapon = 'pistol';
+  me.slots = ['pistol', null];
+  me.ammo = { pistol: Infinity };
   me.kills = 0; me.deaths = 0;
-  me.alive = true; me.hp = CFG.MAX_HP;
-  me.shield = 0; me.shieldUntil = 0; me.speedUntil = 0;
-  me.weapon = 'pistol'; me.owned = { pistol: true };
-  me.team = S.teams[MY_ID] || 0;
   const sp = pickSpawn();
   me.x = sp.x; me.y = sp.y;
   me.protectUntil = S.now + CFG.PROTECT_MS;
@@ -388,148 +435,22 @@ function resetForMatch() {
   me.dirty = true;
   S.bullets.length = 0;
   S.seenExplosions.clear();
-  S.spectateId = null;
-  for (const r of Object.values(S.remotes)) {
-    r.alive = true; r.kills = 0; r.deaths = 0; r.hp = CFG.MAX_HP;
-    r.team = S.teams[r.id] || 0;
-  }
-}
-
-function enterPlaying() {
-  S.state = 'playing';
-  S.results = null;
-  resetForMatch();
-  UI.enterMatch();
-  UI.syncModeCards();
+  UI.enterGame();
   UI.syncWeaponChips();
-  UI.setNotice(S.mode === 'br' ? 'BATTLE ROYALE – die Zone schrumpft!' : 'Runde gestartet!', 2400);
+  UI.setNotice('VIEL ERFOLG!', 2000);
   Sfx.play('start');
-}
-
-function enterLobby() {
-  const me = S.me;
-  S.state = 'lobby';
-  S.results = null;
-  S.teams = {};
-  S.startTs = 0; S.endAt = 0;
-  me.alive = true; me.hp = CFG.MAX_HP;
-  me.shield = 0; me.shieldUntil = 0; me.speedUntil = 0;
-  me.weapon = 'pistol'; me.owned = { pistol: true };
-  me.kills = 0; me.deaths = 0; me.team = 0;
-  const sp = pickSpawn();
-  me.x = sp.x; me.y = sp.y;
-  me.dirty = true;
-  S.bullets.length = 0;
-  S.zoneWarn = false;
-  for (const r of Object.values(S.remotes)) { r.alive = true; r.kills = 0; r.deaths = 0; }
-  UI.enterLobby();
-  UI.syncModeCards();
-  UI.syncWeaponChips();
-  Sfx.play('ui');
-}
-
-function enterEnded(res) {
-  S.state = 'ended';
-  if (res) S.results = res;
-  S.zoneWarn = false;
-  UI.showResults(S.results);
-  Sfx.play('end');
-}
-
-function currentEntries() {
-  const me = S.me;
-  const list = [{ id: MY_ID, name: me.name, color: me.color, kills: me.kills, deaths: me.deaths, alive: me.alive, team: me.team }];
-  for (const r of Object.values(S.remotes)) {
-    list.push({ id: r.id, name: r.name, color: r.color, kills: r.kills, deaths: r.deaths, alive: r.alive, team: r.team });
-  }
-  return list;
-}
-
-function buildResults() {
-  const entries = currentEntries();
-  const mode = S.mode;
-  let winnerId = null, winnerName = '', winnerTeam = -1;
-  if (mode === 'tdm') {
-    let best = -1, bestT = 0;
-    for (const t of [0, 1]) {
-      const sum = entries.filter((e) => e.team === t).reduce((a, e) => a + e.kills, 0);
-      if (sum > best) { best = sum; bestT = t; }
-    }
-    winnerTeam = bestT;
-    winnerName = TEAM_NAMES[bestT];
-    entries.sort((a, b) => a.team - b.team || b.kills - a.kills || a.deaths - b.deaths);
-  } else if (mode === 'br') {
-    entries.sort((a, b) => (b.alive - a.alive) || (b.kills - a.kills) || (a.deaths - b.deaths));
-    const w = entries.find((e) => e.alive) || entries[0];
-    if (w) { winnerId = w.id; winnerName = w.name; }
-  } else {
-    entries.sort((a, b) => (b.kills - a.kills) || (a.deaths - b.deaths));
-    const w = entries[0];
-    if (w) { winnerId = w.id; winnerName = w.name; }
-  }
-  return { mode, winnerId, winnerName, winnerTeam, entries, endedAt: Date.now(), room: Net.room };
-}
-
-function buildSync() {
-  return {
-    h: MY_ID, st: S.state, md: S.mode, ts: S.startTs, en: S.endAt, tm: S.teams, res: S.results,
-    pu: S.powerups.map((p) => [p.slot, p.respawns, p.hiddenUntil]),
-  };
-}
-
-function sendSync() {
-  S.lastSync = Date.now();
-  Net.send('sync', buildSync());
-}
-
-function countAlive() {
-  let n = S.me.alive ? 1 : 0;
-  for (const r of Object.values(S.remotes)) if (r.alive) n++;
-  return n;
-}
-
-function countPlayers() {
-  return 1 + Object.values(S.remotes).filter((r) => S.now - r.last < CFG.STALE_MS * 2).length;
-}
-
-function endMatch() {
-  if (S.state !== 'playing') return;
-  S.results = buildResults();
-  enterEnded(S.results);
-  sendSync();
-  Net.saveScores(S.results);
+  requestSync();
 }
 
 // ---------------- Kamera ----------------
 
-function spectateTarget() {
-  const now = S.now;
-  if (now > S.spectateScan) {
-    S.spectateScan = now + 1000;
-    let cur = S.spectateId ? S.remotes[S.spectateId] : null;
-    if (cur && cur.alive && !cur.stale) { /* behalten */ }
-    else {
-      let best = null;
-      for (const r of Object.values(S.remotes)) {
-        if (!r.alive || r.stale) continue;
-        if (!best || r.kills > best.kills || (r.kills === best.kills && r.last > best.last)) best = r;
-      }
-      S.spectateId = best ? best.id : null;
-    }
-  }
-  const r = S.spectateId ? S.remotes[S.spectateId] : null;
-  return r && r.alive ? r : S.me;
-}
-
 function updateCamera(dt) {
-  let t = S.me;
-  if (S.state === 'playing' && S.mode === 'br' && !S.me.alive) t = spectateTarget();
   const k = 1 - Math.exp(-dt * 7);
-  S.cam.x += (t.x - S.cam.x) * k;
-  S.cam.y += (t.y - S.cam.y) * k;
+  S.cam.x += (S.me.x - S.cam.x) * k;
+  S.cam.y += (S.me.y - S.cam.y) * k;
   const hw = (Render.w / 2) / S.cam.scale, hh = (Render.h / 2) / S.cam.scale;
-  S.cam.x = CFG.WORLD.w > hw * 2 ? clamp(S.cam.x, hw, CFG.WORLD.w - hw) : CFG.WORLD.w / 2;
-  S.cam.y = CFG.WORLD.h > hh * 2 ? clamp(S.cam.y, hh, CFG.WORLD.h - hh) : CFG.WORLD.h / 2;
+  S.cam.x = World.w > hw * 2 ? clamp(S.cam.x, hw, World.w - hw) : World.w / 2;
+  S.cam.y = World.h > hh * 2 ? clamp(S.cam.y, hh, World.h - hh) : World.h / 2;
 }
 
 // ---------------- Haupt-Update ----------------
@@ -539,26 +460,31 @@ function update(dt) {
   S.now = now;
   const me = S.me;
 
-  // Host + Herzschlag
-  const h = Net.electHost();
-  if (h !== S.hostId) { S.hostId = h; UI.renderRoster(); UI.syncModeCards(); }
-  if (S.hostId === MY_ID && now - S.lastSync >= CFG.SYNC_MS) sendSync();
+  // Welt-Skalierung (Presence → Zielgröße, weiche Animation)
+  if (now - (S.lastScale || 0) >= 1000) {
+    S.lastScale = now;
+    World.setTarget(Net.roster().length);
+  }
+  World.update(dt);
 
   // Eingabe: Bewegung
   const mv = Input.moveVector();
-  const speed = CFG.SPEED * (now < me.speedUntil ? CFG.SPEED_MULT : 1);
-  if (me.alive && mv.mag > 0) {
-    me.x += mv.x * speed * dt;
-    me.y += mv.y * speed * dt;
-    resolveEntity(me);
-    me.x = clamp(me.x, CFG.R, CFG.WORLD.w - CFG.R);
-    me.y = clamp(me.y, CFG.R, CFG.WORLD.h - CFG.R);
+  const speed = CFG.SPEED;
+  if (S.state === 'playing' && me.alive) {
+    if (mv.mag > 0) {
+      me.x += mv.x * speed * dt;
+      me.y += mv.y * speed * dt;
+      resolveEntity(me);
+    }
+    // Im wegfallenden Randbereich sanft nach innen schieben
+    me.x = clamp(me.x, CFG.R, World.w - CFG.R);
+    me.y = clamp(me.y, CFG.R, World.h - CFG.R);
   }
 
   // Eingabe: Zielen & Schiessen
   const aim = Input.aimInfo();
   let fire = false;
-  if (me.alive) {
+  if (S.state === 'playing' && me.alive) {
     if (aim.source === 'stick' && aim.active) {
       me.angle = aim.angle;
       fire = true;
@@ -582,23 +508,9 @@ function update(dt) {
 
   // Spielwelt
   updateBullets(dt);
-  updateZone(dt);
   if (S.state === 'playing') {
     updatePowerups();
-    if (!me.alive && S.mode !== 'br' && now >= me.deadUntil) respawnMe();
-    if (S.hostId === MY_ID) {
-      if (S.mode === 'br') {
-        const total = countPlayers();
-        // Grace: frisch gestartete Matchs noch nicht beenden – Remote-Alive-Flags
-        // kommen erst mit dem nächsten Move-Paket (Reihenfolge-Race nach Rematch)
-        const fresh = now - S.startTs < CFG.START_GRACE_MS;
-        if ((!fresh && countAlive() <= 1 && total > 1) || now >= S.endAt) endMatch();
-      } else if (now >= S.endAt) {
-        endMatch();
-      }
-    }
-  } else if (S.state === 'lobby' && me.alive && me.hp < CFG.MAX_HP) {
-    me.hp = Math.min(CFG.MAX_HP, me.hp + CFG.LOBBY_REGEN * dt);
+    if (!me.alive && now >= me.deadUntil) respawnMe();
   }
 
   // Abläufe / Decay
@@ -637,13 +549,13 @@ function update(dt) {
   updateCamera(dt);
 
   // Netzwerk senden
-  if (now - S.lastNet >= CFG.NET_MS || me.dirty) {
+  if (S.state === 'playing' && (now - S.lastNet >= CFG.NET_MS || me.dirty)) {
     S.lastNet = now;
     me.dirty = false;
     Net.send('move', {
       i: MY_ID, n: me.name, c: me.color, x: r1(me.x), y: r1(me.y), a: r2(me.angle),
       h: Math.max(0, Math.round(me.hp)), s: Math.round(me.shield),
-      al: me.alive ? 1 : 0, w: me.weapon, k: me.kills, d: me.deaths, t: me.team,
+      al: me.alive ? 1 : 0, w: me.weapon, k: me.kills, d: me.deaths,
     });
   }
 }
@@ -659,7 +571,7 @@ function onMove(p) {
       id: p.i, name: p.n || 'Unbekannt', color: p.c || colorForId(p.i),
       x: p.x, y: p.y, tx: p.x, ty: p.y, ta: p.a, angle: p.a || 0,
       hp: p.h != null ? p.h : CFG.MAX_HP, shield: p.s || 0, alive: p.al !== 0,
-      weapon: p.w || 'pistol', kills: p.k | 0, deaths: p.d | 0, team: p.t | 0,
+      weapon: p.w || 'pistol', kills: p.k | 0, deaths: p.d | 0,
       last: now, flash: 0, muzzle: 0, stale: false,
     };
     return;
@@ -673,7 +585,7 @@ function onMove(p) {
   r.hp = p.h; r.shield = p.s || 0;
   r.alive = nowAlive;
   r.weapon = p.w || 'pistol';
-  r.kills = p.k | 0; r.deaths = p.d | 0; r.team = p.t | 0;
+  r.kills = p.k | 0; r.deaths = p.d | 0;
   r.last = now;
 }
 
@@ -717,40 +629,46 @@ function onPickup(p) {
   if (p.r <= pu.respawns && p.t <= pu.hiddenUntil) return;
   pu.respawns = p.r;
   pu.hiddenUntil = p.t;
-  pu.type = puType(pu.slot, pu.respawns);
   sparkAt(pu.x, pu.y, PU_INFO[pu.type].color, 10);
 }
 
-function onSync(p) {
-  if (!p || !p.st) return;
-  // Nur Syncs des (vom eigenen Presence-Bild gewählten) Hosts akzeptieren.
-  // Verhindert, dass ein verwirrter Self-Host mit leerem Presence-Bild den
-  // echten Zustand überschreibt (z. B. ein veraltetes "ended" nach Rematch).
-  if (p.h && p.h !== S.hostId) return;
+function onDrop(p) {
+  if (!p || !p.id) return;
+  if (S.drops.some((d) => d.id === p.id)) return;
+  S.drops.push({ id: p.id, w: p.w, x: p.x, y: p.y });
+}
+
+function onDropGone(p) {
+  if (!p || !p.id) return;
+  const i = S.drops.findIndex((d) => d.id === p.id);
+  if (i >= 0) S.drops.splice(i, 1);
+}
+
+function onSyncReq(p) {
+  if (!p || p.i === MY_ID) return;
+  if (Net.syncAnswerer() !== MY_ID) return;
+  const ans = syncPayload();
+  ans.to = p.i;
+  Net.send('syncans', ans);
+}
+
+function onSyncAns(p) {
+  if (!p) return;
+  if (p.to && p.to !== MY_ID) return;
   if (p.pu) adoptPU(p.pu);
-  if (p.md && MODES[p.md]) S.mode = p.md;
-  if (p.tm) S.teams = p.tm;
-  if (p.st === 'playing') {
-    if (S.state !== 'playing' || p.ts !== S.startTs) {
-      S.startTs = p.ts || Date.now();
-      S.endAt = p.en || 0;
-      enterPlaying();
-    } else {
-      S.startTs = p.ts; S.endAt = p.en;
-    }
-  } else if (p.st === 'lobby') {
-    if (S.state !== 'lobby') enterLobby();
-    else { S.startTs = 0; S.endAt = 0; S.teams = {}; S.results = null; }
-  } else if (p.st === 'ended') {
-    if (S.state !== 'ended') enterEnded(p.res);
-    else if (p.res) { S.results = p.res; UI.showResults(p.res); }
+  if (p.dr) adoptDrops(p.dr);
+}
+
+// Drops für Spät-Azmeister übernehmen (nur neue, eigene nie überschreiben)
+function adoptDrops(rows) {
+  for (const r of rows) {
+    const d = { id: r[0], w: r[1], x: r[2], y: r[3] };
+    if (!d.id || S.drops.some((x) => x.id === d.id)) continue;
+    S.drops.push(d);
   }
-  UI.syncModeCards();
 }
 
 function onPresence() {
-  S.hostId = Net.electHost();
-  UI.renderRoster();
   if (!Net.channel) return;
   const st = Net.channel.presenceState();
   for (const id of Object.keys(S.remotes)) {
@@ -763,32 +681,26 @@ function onPresence() {
 const Game = {
   init() {
     Sfx.init();
-    const q = new URLSearchParams(location.search);
-    const room = ((q.get('room') || 'main').replace(/[^a-zA-Z0-9]/g, '').slice(0, 8)) || 'main';
     let name = '';
     try { name = localStorage.getItem('ba_name') || ''; } catch (e) { /* egal */ }
     S.me.name = name || ('Spieler-' + MY_ID.slice(0, 4));
     S.me.color = colorForId(MY_ID);
-    const sp = SPAWNS[Math.floor(Math.random() * SPAWNS.length)];
+    const sp = World.spawns[Math.floor(Math.random() * World.spawns.length)] || { x: World.w / 2, y: World.h / 2 };
     S.me.x = sp.x; S.me.y = sp.y;
     S.cam.x = sp.x; S.cam.y = sp.y;
     initPowerups();
 
     const canvas = document.getElementById('c');
     Render.init(canvas);
-    UI.init(room);
+    UI.init();
     Input.init(canvas);
     Input.onWeaponSlot = (n) => Game.setWeaponBySlot(n);
-    Net.init(room);
-    UI.refreshHighscores();
+    Net.init();
     requestAnimationFrame(frame);
   },
 
   update,
-  isHost: () => S.hostId === MY_ID,
-  room: () => Net.room,
-
-  onMove, onShoot, onExplode, onHit, onDeath, onPickup, onSync, onPresence,
+  onMove, onShoot, onExplode, onHit, onDeath, onPickup, onDrop, onDropGone, onSyncReq, onSyncAns, onPresence,
 
   setName(n) {
     n = (n || '').trim().slice(0, CFG.NAME_MAX);
@@ -798,70 +710,42 @@ const Game = {
     try { localStorage.setItem('ba_name', n); } catch (e) { /* egal */ }
     Net.track();
     S.me.dirty = true;
-    UI.renderRoster();
   },
 
-  setMode(m) {
-    if (!MODES[m] || !Game.isHost() || S.state !== 'lobby') return;
-    S.mode = m;
-    Sfx.play('ui');
-    UI.syncModeCards();
-  },
-
-  startMatch(mode) {
-    if (!Game.isHost()) return;
-    if (S.state !== 'lobby' && S.state !== 'ended') return;
-    S.mode = MODES[mode] ? mode : S.mode;
-    S.startTs = Date.now();
-    S.endAt = S.startTs + MODES[S.mode].dur;
-    S.teams = assignTeams();
-    S.results = null;
-    enterPlaying();
-    sendSync();
-  },
-
-  toLobby() {
-    if (!Game.isHost()) return;
-    enterLobby();
-    sendSync();
+  startGame() {
+    if (S.state === 'playing') return;
+    S.me.name = (document.getElementById('nameIn').value || '').trim().slice(0, CFG.NAME_MAX) || S.me.name;
+    try { localStorage.setItem('ba_name', S.me.name); } catch (e) { /* egal */ }
+    Net.track();
+    startGameState();
   },
 
   setWeapon(w) {
     const me = S.me;
-    if (!WEAPONS[w] || !me.alive || me.weapon === w) return;
-    if (S.state === 'playing' && !me.owned[w]) return;
+    if (!WEAPONS[w] || !me.alive) return;
+    if (!me.slots.includes(w)) return;
+    if (me.weapon === w) return;
     me.weapon = w;
     me.dirty = true;
     Sfx.play('ui');
     UI.syncWeaponChips();
   },
 
+  // Taste 1..2 → Slot n
   setWeaponBySlot(n) {
-    const w = WEAPON_ORDER.find((k) => WEAPONS[k].slot === n);
+    const w = S.me.slots[n - 1];
     if (w) Game.setWeapon(w);
   },
 
   standings() {
-    const es = currentEntries();
-    let teamScores = null;
-    if (S.mode === 'tdm') {
-      teamScores = [0, 1].map((t) => ({
-        t, name: TEAM_NAMES[t], color: TEAM_COLORS[t],
-        kills: es.filter((e) => e.team === t).reduce((a, e) => a + e.kills, 0),
-      }));
-      es.sort((a, b) => a.team - b.team || b.kills - a.kills || a.deaths - b.deaths);
-    } else if (S.mode === 'br') {
-      es.sort((a, b) => (b.alive - a.alive) || (b.kills - a.kills) || (a.deaths - b.deaths));
-    } else {
-      es.sort((a, b) => (b.kills - a.kills) || (a.deaths - b.deaths));
+    const me = S.me;
+    const list = [{ id: MY_ID, name: me.name, kills: me.kills, deaths: me.deaths, alive: me.alive }];
+    for (const r of Object.values(S.remotes)) {
+      list.push({ id: r.id, name: r.name, kills: r.kills, deaths: r.deaths, alive: r.alive });
     }
-    es.forEach((e) => { e.isMe = e.id === MY_ID; e.isHost = e.id === S.hostId; });
-    return { mode: S.mode, rows: es, teamScores, hostId: S.hostId };
-  },
-
-  spectateName() {
-    const r = S.spectateId ? S.remotes[S.spectateId] : null;
-    return r ? r.name : null;
+    list.sort((a, b) => (b.kills - a.kills) || (a.deaths - b.deaths));
+    list.forEach((e) => { e.isMe = e.id === MY_ID; });
+    return { rows: list };
   },
 };
 

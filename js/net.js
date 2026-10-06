@@ -1,4 +1,4 @@
-// js/net.js — Supabase Realtime: Broadcast, Presence, Highscores
+// js/net.js — Supabase Realtime: Broadcast, Presence
 'use strict';
 
 const MY_ID = 'p' + Math.random().toString(36).slice(2, 10);
@@ -6,17 +6,15 @@ const MY_ID = 'p' + Math.random().toString(36).slice(2, 10);
 const Net = {
   sb: null,
   channel: null,
-  room: 'main',
   connected: false,
 
-  init(room) {
-    this.room = room;
+  init() {
     if (!window.supabase) {
       UI.setNetStatus('SDK nicht geladen!', true);
       return;
     }
     this.sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-    this.channel = this.sb.channel('arena_' + room, {
+    this.channel = this.sb.channel('arena_world', {
       config: { broadcast: { self: false }, presence: { key: MY_ID } },
     });
 
@@ -27,7 +25,10 @@ const Net = {
       .on('broadcast', { event: 'hit' },      (e) => Game.onHit(e.payload))
       .on('broadcast', { event: 'death' },    (e) => Game.onDeath(e.payload))
       .on('broadcast', { event: 'pickup' },   (e) => Game.onPickup(e.payload))
-      .on('broadcast', { event: 'sync' },     (e) => Game.onSync(e.payload))
+      .on('broadcast', { event: 'drop' },     (e) => Game.onDrop(e.payload))
+      .on('broadcast', { event: 'dropgone' }, (e) => Game.onDropGone(e.payload))
+      .on('broadcast', { event: 'syncreq' },  (e) => Game.onSyncReq(e.payload))
+      .on('broadcast', { event: 'syncans' },  (e) => Game.onSyncAns(e.payload))
       .on('presence',  { event: 'sync' },     () => Game.onPresence())
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
@@ -59,7 +60,7 @@ const Net = {
   },
 
   // Heal: regelmäßig neu tracken, falls das eigene Presence-Event verloren ging
-  // (sonst bleibt der Client dauerhaft unsichtbar / hält sich selbst fälschlich für Host)
+  // (sonst bleibt der Client dauerhaft unsichtbar)
   retrack() {
     if (!this.channel) return;
     const cur = this.channel.presenceState()[MY_ID];
@@ -81,52 +82,12 @@ const Net = {
     return out;
   },
 
-  // Host = niedrigste ID (stabil, identisch auf allen Clients)
-  electHost() {
+  // Niedrigste Presence-ID = zuständig für Sync-Antworten (stabil, identisch auf allen Clients)
+  syncAnswerer() {
     if (!this.channel) return MY_ID;
     const keys = Object.keys(this.channel.presenceState());
     if (!keys.length) return MY_ID;
     keys.sort();
     return keys[0];
-  },
-
-  // --- Highscores (Supabase-Tabelle "scores", siehe supabase-schema.sql) ---
-  async fetchScores() {
-    if (!this.sb) return null;
-    try {
-      const { data, error } = await this.sb
-        .from(CFG.SCORE_TABLE)
-        .select('player_name, kills, deaths, mode, won, played_at')
-        .eq('room', this.room)
-        .order('kills', { ascending: false })
-        .limit(10);
-      if (error) throw error;
-      return data;
-    } catch (e) {
-      console.warn('Highscores konnten nicht geladen werden:', e.message);
-      return null;
-    }
-  },
-
-  async saveScores(results) {
-    if (!this.sb || !results || !results.entries) return;
-    try {
-      const rows = results.entries.map((e) => ({
-        room: this.room,
-        player_id: e.id,
-        player_name: e.name,
-        mode: results.mode,
-        kills: e.kills | 0,
-        deaths: e.deaths | 0,
-        won: e.id === results.winnerId || (results.winnerTeam >= 0 && e.team === results.winnerTeam),
-        played_at: new Date().toISOString(),
-      }));
-      const { error } = await this.sb.from(CFG.SCORE_TABLE).insert(rows);
-      if (error) throw error;
-      UI.refreshHighscores();
-    } catch (e) {
-      console.warn('Highscores nicht speicherbar:', e.message);
-      UI.setNotice('Highscores nicht verfügbar (Tabelle anlegen? Siehe README)', 4000);
-    }
   },
 };

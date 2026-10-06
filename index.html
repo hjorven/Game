@@ -9,7 +9,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="description" content="2D Top-Down Multiplayer Shooter mit Echtzeit-Multiplayer (Supabase), Touch-Steuerung und drei Spielmodi.">
+  <meta name="description" content="2D Top-Down Multiplayer Shooter mit Echtzeit-Multiplayer (Supabase) und Touch-Steuerung.">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <style>
     :root {
@@ -89,22 +89,6 @@
       min-height: 14px;
     }
 
-    #topc {
-      position: absolute; top: calc(8px + var(--sa-t)); left: 50%;
-      transform: translateX(-50%);
-      text-align: center; min-width: 150px;
-    }
-    #modeLbl {
-      font-size: 11px; font-weight: 800; letter-spacing: .14em;
-      color: var(--acc); text-transform: uppercase;
-      text-shadow: 0 1px 3px #000;
-    }
-    #timer {
-      font-size: 30px; font-weight: 900; line-height: 1.05;
-      text-shadow: 0 2px 6px #000;
-      font-variant-numeric: tabular-nums;
-    }
-    #subLbl { font-size: 11px; color: var(--dim); font-weight: 700; min-height: 14px; }
     #kd {
       position: absolute; top: calc(12px + var(--sa-t)); left: calc(10px + var(--sa-l));
       margin-top: 66px;
@@ -211,9 +195,6 @@
       border-radius: 6px; font: inherit; font-size: 10px; font-weight: 800;
       padding: 4px 8px; cursor: pointer;
     }
-    .team-scores { display: flex; gap: 14px; justify-content: center; margin-bottom: 8px; }
-    .tchip { font-weight: 900; font-size: 16px; letter-spacing: .05em; }
-
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
     th, td { padding: 6px 8px; text-align: left; }
     th {
@@ -222,7 +203,6 @@
     }
     td { border-bottom: 1px solid rgba(255,255,255,.06); }
     tr.me td { background: rgba(255,213,74,.12); font-weight: 800; }
-    tr.won td { color: var(--green); font-weight: 700; }
     tr.out td { opacity: .45; }
 
     /* ---------- Overlays ---------- */
@@ -234,7 +214,6 @@
       overflow-y: auto;
       -webkit-overflow-scrolling: touch;
     }
-    #results { z-index: 50; background: rgba(8,10,14,.72); }
 
     .panel {
       width: min(760px, 100%);
@@ -263,9 +242,6 @@
     .net-line span { color: var(--green); font-weight: 800; }
     .net-line span.err { color: var(--red); }
 
-    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
-    @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
-
     .lbl {
       display: block; font-size: 10px; font-weight: 800;
       letter-spacing: .12em; text-transform: uppercase;
@@ -282,8 +258,6 @@
       -webkit-user-select: text; user-select: text;
     }
     .inp:focus { outline: 2px solid var(--acc); border-color: transparent; }
-    .row { display: flex; gap: 8px; }
-    .row .inp { flex: 1; min-width: 0; }
 
     .btn {
       background: var(--acc); color: #16130a;
@@ -296,58 +270,14 @@
     .btn:hover { filter: brightness(1.08); }
     .btn:active { transform: scale(.97); }
     .btn:disabled { opacity: .45; cursor: default; }
-    .btn.ghost {
-      background: var(--panel2); color: var(--txt);
-      border: 1px solid var(--line); font-size: 13px;
-    }
-    .btn.small { font-size: 12px; padding: 9px 12px; }
-    .btn.blue { background: var(--blue); color: #06222e; }
-
-    #modeCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
-    .mcard {
-      background: var(--panel2);
-      border: 2px solid var(--line);
-      border-radius: 11px;
-      color: var(--txt);
-      font: inherit; text-align: left;
-      padding: 10px 12px; cursor: pointer;
-      display: flex; flex-direction: column; gap: 3px;
-    }
-    .mcard b { font-size: 14px; }
-    .mcard span { font-size: 11px; color: var(--dim); line-height: 1.3; }
-    .mcard.sel { border-color: var(--acc); background: rgba(255,213,74,.1); }
-    .mcard:disabled { opacity: .5; cursor: default; }
-    .mcard:disabled.sel { opacity: .9; }
 
     #btnStart { width: 100%; margin-top: 14px; font-size: 17px; padding: 14px; }
-    #hostNote { text-align: center; font-size: 11px; color: var(--dim); margin-top: 7px; }
 
     .sub {
       font-size: 11px; font-weight: 800; letter-spacing: .12em;
       text-transform: uppercase; color: var(--acc);
       margin: 16px 0 7px;
     }
-    #roster { display: flex; flex-direction: column; gap: 4px; }
-    .roster-head { font-size: 11px; color: var(--dim); margin-bottom: 3px; }
-    .roster-row {
-      display: flex; align-items: center; gap: 8px;
-      background: var(--panel2); border-radius: 8px;
-      padding: 7px 10px; font-size: 13px; font-weight: 700;
-    }
-    .roster-row.me { outline: 1px solid rgba(255,213,74,.5); }
-    .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
-    .rname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .host-tag {
-      font-size: 9px; font-weight: 900; letter-spacing: .1em;
-      background: var(--acc); color: #16130a;
-      border-radius: 4px; padding: 2px 5px;
-    }
-
-    .share { display: flex; align-items: center; gap: 8px; background: var(--panel2); border: 1px dashed var(--line); border-radius: 9px; padding: 7px 10px; }
-    #shareLink { flex: 1; font-size: 11px; color: var(--blue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-user-select: all; user-select: all; }
-
-    .scores-note { font-size: 11px; color: var(--dim); padding: 6px 0; }
-    #scoresBody td { font-size: 12px; padding: 5px 8px; }
 
     .controls {
       display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px;
@@ -361,17 +291,6 @@
       padding: 0 5px; font-size: 10.5px; font-family: inherit; font-weight: 800;
       color: var(--txt);
     }
-
-    /* Ergebnis */
-    #resTitle {
-      font-size: clamp(24px, 6vw, 40px); font-weight: 950;
-      text-align: center; letter-spacing: .04em;
-    }
-    #resTitle.win { color: var(--green); }
-    #resSub { text-align: center; color: var(--dim); font-size: 13px; margin: 4px 0 14px; }
-    #resBody { margin-bottom: 16px; }
-    .res-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
-    #resWait { text-align: center; font-size: 12px; color: var(--dim); margin-top: 10px; }
 
     #loading {
       position: fixed; inset: 0; z-index: 99;
@@ -395,12 +314,6 @@
     </div>
     <div id="kd">K 0 · D 0</div>
 
-    <div id="topc">
-      <div id="modeLbl">Deathmatch</div>
-      <div id="timer">--:--</div>
-      <div id="subLbl"></div>
-    </div>
-
     <div id="topBtns">
       <button id="btnBoard" class="pill">Tabelle (Tab)</button>
       <button id="btnMute" class="pill">Ton: an</button>
@@ -409,12 +322,7 @@
     <div id="killfeed"></div>
     <div id="dead" class="hidden"></div>
 
-    <div id="weapons">
-      <button class="wchip" data-w="pistol"><span class="key">1</span><span class="wname">Pistole</span></button>
-      <button class="wchip" data-w="shotgun"><span class="key">2</span><span class="wname">Schrot</span></button>
-      <button class="wchip" data-w="sniper"><span class="key">3</span><span class="wname">Sniper</span></button>
-      <button class="wchip" data-w="rocket"><span class="key">4</span><span class="wname">Rakete</span></button>
-    </div>
+    <div id="weapons"></div>
   </div>
 
   <div id="notice" class="hide"></div>
@@ -425,80 +333,32 @@
       <b>TABELLE</b>
       <button id="btnBoardClose">Schliessen</button>
     </div>
-    <div id="boardTeams"></div>
     <div id="boardBody"></div>
   </div>
 
-  <!-- Lobby -->
+  <!-- Start -->
   <div id="lobby" class="overlay">
-    <div class="panel">
+    <div class="panel narrow">
       <div class="title">ARENA</div>
       <div class="subtitle">2D Top-Down Multiplayer Shooter · Echtzeit über Supabase</div>
       <div class="net-line">Status: <span id="netStatus">Verbinde …</span></div>
 
-      <div class="grid2">
-        <div>
-          <label class="lbl" for="nameIn">Dein Name</label>
-          <input id="nameIn" class="inp" maxlength="14" autocomplete="off" spellcheck="false">
+      <label class="lbl" for="nameIn">Dein Name</label>
+      <input id="nameIn" class="inp" maxlength="14" autocomplete="off" spellcheck="false">
 
-          <label class="lbl">Raum (freundlich geteilt)</label>
-          <div class="row">
-            <input id="roomIn" class="inp" maxlength="8" autocomplete="off" spellcheck="false">
-            <button id="btnRoom" class="btn ghost small">Beitreten</button>
-          </div>
-          <div class="share" style="margin-top:8px">
-            <span id="shareLink"></span>
-            <button id="btnCopy" class="btn ghost small">Kopieren</button>
-          </div>
+      <button id="btnStart" class="btn">Spielen</button>
 
-          <div class="lbl">Spielmodus</div>
-          <div id="modeCards">
-            <button class="mcard sel" data-m="ffa"><b>Deathmatch</b><span>3 Min. – wer hat die meisten Kills?</span></button>
-            <button class="mcard" data-m="br"><b>Battle Royale</b><span>Zone schrumpft – letzter Überlebender gewinnt</span></button>
-            <button class="mcard" data-m="tdm"><b>Team-Deathmatch</b><span>3 Min. – Rot gegen Blau!</span></button>
-          </div>
-
-          <button id="btnStart" class="btn">Runde starten</button>
-          <div id="hostNote"></div>
-        </div>
-
-        <div>
-          <div id="roster"></div>
-
-          <div class="sub">Top 10 Highscores (dieser Raum)</div>
-          <table>
-            <thead><tr><th>#</th><th>Spieler</th><th>Kills</th><th>Modus</th><th>Datum</th></tr></thead>
-            <tbody id="scoresBody"></tbody>
-          </table>
-          <div id="scoresNote" class="scores-note hidden"></div>
-
-          <div class="sub">Steuerung</div>
-          <div class="controls">
-            <span><b>PC:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Bewegen</span>
-            <span><b>Touch:</b> linker Daumen = Bewegen</span>
-            <span><b>PC:</b> Maus = Zielen, <kbd>Leertaste</kbd>/Klick = Schiessen</span>
-            <span><b>Touch:</b> rechter Daumen = Zielen &amp; Schiessen</span>
-            <span><b>PC:</b> <kbd>1</kbd>–<kbd>4</kbd> Waffe wechseln</span>
-            <span><b>Touch:</b> aufs Ziel tippen = Schuss</span>
-            <span><b>PC:</b> <kbd>Tab</kbd> Tabelle</span>
-            <span><b>Power-Ups:</b> auf der Map einsammeln</span>
-          </div>
-        </div>
+      <div class="sub">Steuerung</div>
+      <div class="controls">
+        <span><b>PC:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Bewegen</span>
+        <span><b>Touch:</b> linker Daumen = Bewegen</span>
+        <span><b>PC:</b> Maus = Zielen, <kbd>Leertaste</kbd>/Klick = Schiessen</span>
+        <span><b>Touch:</b> rechter Daumen = Zielen &amp; Schiessen</span>
+        <span><b>PC:</b> <kbd>1</kbd>–<kbd>2</kbd> Waffe wechseln</span>
+        <span><b>Touch:</b> aufs Ziel tippen = Schuss</span>
+        <span><b>PC:</b> <kbd>Tab</kbd> Tabelle</span>
+        <span><b>Loot:</b> Waffen &amp; Items auf der Map einsammeln</span>
       </div>
-    </div>
-  </div>
-
-  <!-- Ergebnis -->
-  <div id="results" class="overlay hidden">
-    <div class="panel narrow">
-      <div id="resTitle">Runde beendet</div>
-      <div id="resSub"></div>
-      <div id="resBody"></div>
-      <div class="res-actions">
-        <button id="btnAgain" class="btn">Nochmal starten</button>
-        <button id="btnToLobby" class="btn ghost">Zur Lobby</button>
-      </div>
-      <div id="resWait" class="hidden">Wartet auf den Host …</div>
     </div>
   </div>
 
@@ -506,6 +366,7 @@
   <noscript>Dieses Spiel benötigt JavaScript.</noscript>
 
   <script src="js/config.js"></script>
+  <script src="js/world.js"></script>
   <script src="js/audio.js"></script>
   <script src="js/net.js"></script>
   <script src="js/input.js"></script>
