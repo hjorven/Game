@@ -65,6 +65,8 @@ const Input = {
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
     window.addEventListener('keydown', (e) => {
+      const t = e.target;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return; // Tippen nicht stören
       Sfx.resume();
       const k = e.key.toLowerCase();
       this.keys[k] = true;
@@ -81,6 +83,9 @@ const Input = {
       this.aimStick = null;
     });
     document.addEventListener('pointerdown', () => Sfx.resume(), { once: false });
+    // iOS Safari: Pinch-Zoom / Frame-Gesten unterdrücken
+    document.addEventListener('gesturestart', (e) => e.preventDefault());
+    document.addEventListener('dblclick', (e) => e.preventDefault());
   },
 
   newStick(e) {
@@ -129,6 +134,10 @@ const Input = {
     }
     if (this.mouse.has) {
       return { source: 'mouse', screen: this.mouse, active: this.mouse.down || !!this.keys[' '], mag: 1 };
+    }
+    // Nur Tastatur (keine Maus benutzt): halte Leertaste zum Schiessen
+    if (this.keys[' ']) {
+      return { source: 'key', active: true, mag: 1 };
     }
     return { source: 'none', active: false, mag: 0 };
   },

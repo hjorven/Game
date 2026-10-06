@@ -570,6 +570,10 @@ function update(dt) {
       const w = Render.screenToWorld(aim.screen.x, aim.screen.y);
       if (dist(me.x, me.y, w.x, w.y) > 8) me.angle = Math.atan2(w.y - me.y, w.x - me.x);
       fire = aim.active;
+    } else if (aim.source === 'key') {
+      // Tastatur ohne Maus: Blickrichtung = Bewegungsrichtung, Leertaste schießt
+      if (mv.mag > 0) me.angle = Math.atan2(mv.y, mv.x);
+      fire = true;
     } else if (mv.mag > 0) {
       me.angle = Math.atan2(mv.y, mv.x);
     }
