@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>2D Top-Down Shooter</title>
-  <!-- Supabase JS Library (UMD Bundle) -->
+  <!-- Supabase JS Library laden -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
@@ -23,10 +23,11 @@
 
   <canvas id="gameCanvas"></canvas>
 
+  <!-- HIER BEGINNT DER JAVASCRIPT-BEREICH -->
   <script>
     const statusEl = document.getElementById('status');
 
-    // 1. SUPABASE INITIALISIERUNG
+    // Supabase Profil & Credentials
     const SUPABASE_URL = 'https://hnuilozoehvmosgumrsc.supabase.co';
     const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhudWlsb3pvZWh2bW9zZ3VtcnNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyNzY3NTEsImV4cCI6MjEwNjg1Mjc1MX0.ztp_BEa420xSujbBCWLz1QHLOL4YDHE-jWQmP8ucTBo';
 
@@ -38,29 +39,28 @@
 
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    // 2. CANVAS SETUP
+    // Canvas Setup
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // Player State
+    // Spieler-Status
     const myId = 'player_' + Math.random().toString(36).substr(2, 9);
     let player = {
       id: myId,
       x: Math.random() * (canvas.width - 100) + 50,
       y: Math.random() * (canvas.height - 100) + 50,
       angle: 0,
-      color: '#' + Math.floor(Math.random()*16777215).toString(16),
+      color: '#' + Math.floor(Math.random() * 16777215).toString(16),
       hp: 100
     };
 
     let otherPlayers = {};
     let bullets = [];
-
-    // 3. TOUCH & STEUERUNG
     let touchStartPos = null;
-    
+
+    // Steuerung
     canvas.addEventListener('pointerdown', (e) => {
       if (e.clientX > canvas.width / 2) {
         shootBullet(e.clientX, e.clientY);
@@ -82,8 +82,12 @@
 
     canvas.addEventListener('pointerup', () => { touchStartPos = null; });
 
-    // 4. SUPABASE REALTIME SYNC
-    const channel = sb.channel('arena_room_1');
+    // Supabase Realtime Channel
+    const channel = sb.channel('arena_room_1', {
+      config: {
+        broadcast: { self: true }
+      }
+    });
 
     channel
       .on('broadcast', { event: 'player-move' }, ({ payload }) => {
@@ -98,19 +102,103 @@
       })
       .subscribe((status, err) => {
         statusEl.innerText = status;
-        
+
         if (status === 'SUBSCRIBED') {
           statusEl.style.color = '#00ff00';
           statusEl.innerText = 'Verbunden! ID: ' + myId;
           broadcastPosition();
         } else if (status === 'CHANNEL_ERROR') {
           statusEl.style.color = 'red';
-          statusEl.innerText = 'CHANNEL_ERROR: Prüfe Realtime im Supabase Dashboard';
+          statusEl.innerText = 'CHANNEL_ERROR: Verbindung fehlgeschlagen';
           console.error('Channel error details:', err);
         } else if (status === 'TIMED_OUT') {
           statusEl.style.color = 'orange';
-          statusEl.innerText = 'TIMED_OUT: Verbindungssignal verloren';
+          statusEl.innerText = 'TIMED_OUT: Timeout bei der Verbindung';
         }
       });
 
     function broadcastPosition() {
+      channel.send({
+        type: 'broadcast',
+        event: 'player-move',
+        payload: player
+      });
+    }
+
+    function shootBullet(targetX, targetY) {
+      const angle = Math.atan2(targetY - player.y, targetX - player.x);
+      const bullet = {
+        id: Math.random(),
+        shooterId: myId,
+        x: player.x,
+        y: player.y,
+        vx: Math.cos(angle) * 12,
+        vy: Math.sin(angle) * 12
+      };
+      bullets.push(bullet);
+
+      channel.send({
+        type: 'broadcast',
+        event: 'shoot',
+        payload: bullet
+      });
+    }
+
+    // Game Loop
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      bullets.forEach((b, i) => {
+        b.x += b.vx;
+        b.y += b.vy;
+        ctx.fillStyle = '#ffff00';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        if (b.shooterId !== myId) {
+          const dist = Math.hypot(b.x - player.x, b.y - player.y);
+          if (dist < 20) {
+            player.hp -= 10;
+            bullets.splice(i, 1);
+            if (player.hp <= 0) {
+              alert('Du wurdest abgeschossen!');
+              player.hp = 100;
+              player.x = Math.random() * (canvas.width - 100) + 50;
+              player.y = Math.random() * (canvas.height - 100) + 50;
+            }
+          }
+        }
+      });
+
+      drawPlayer(player);
+      Object.values(otherPlayers).forEach(drawPlayer);
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function drawPlayer(p) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, -4, 25, 8);
+
+      ctx.restore();
+
+      ctx.fillStyle = 'red';
+      ctx.fillRect(p.x - 20, p.y - 30, 40, 5);
+      ctx.fillStyle = 'green';
+      ctx.fillRect(p.x - 20, p.y - 30, (p.hp / 100) * 40, 5);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
