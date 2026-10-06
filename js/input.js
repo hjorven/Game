@@ -10,6 +10,7 @@ const Input = {
   tapAim: null,      // { x, y, until } (Screen-Koordinaten)
   canvas: null,
   onWeaponSlot: null, // wird von Game gesetzt
+  onReload: null,     // wird von Game gesetzt
 
   STICK_R: 62,        // visueller Radius
   STICK_DEAD: 10,     // Totzone in px
@@ -72,6 +73,7 @@ const Input = {
       this.keys[k] = true;
       if (k === ' ') e.preventDefault();
       if (k >= '1' && k <= '2' && this.onWeaponSlot) this.onWeaponSlot(+k);
+      if (k === 'r' && this.onReload) this.onReload();
       if (k === 'tab') { e.preventDefault(); UI.toggleBoard(); }
       if (k === 'm' && UI.toggleMute) UI.toggleMute();
     });

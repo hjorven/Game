@@ -30,9 +30,9 @@ const PALETTE = ['#ff5252', '#40c4ff', '#69f0ae', '#ffd740', '#e040fb', '#ff6e40
 
 const WEAPONS = {
   pistol:  { key: 'pistol',  name: 'Pistole',        short: 'PIST', slot: 1, dmg: 14, spd: 900,  rate: 240,  spread: 0.04,  pel: 1, size: 4,   life: 1.2,  color: '#ffd54a' },
-  shotgun: { key: 'shotgun', name: 'Schrotflinte',   short: 'SG',   slot: 2, dmg: 10, spd: 800,  rate: 720,  spread: 0.24,  pel: 5, size: 3.5, life: 0.55, color: '#ff9a3c', ammoMax: 24 },
-  sniper:  { key: 'sniper',  name: 'Sniper',         short: 'SNIP', slot: 3, dmg: 50, spd: 1700, rate: 1100, spread: 0.006, pel: 1, size: 5,   life: 1.4,  color: '#7fdcff', ammoMax: 12 },
-  rocket:  { key: 'rocket',  name: 'Raketenwerfer',  short: 'RAK',  slot: 4, dmg: 60, spd: 540,  rate: 1500, spread: 0,     pel: 1, size: 7,   life: 2.2,  color: '#ff5a5a', splash: 120, ammoMax: 6 },
+  shotgun: { key: 'shotgun', name: 'Schrotflinte',   short: 'SG',   slot: 2, dmg: 10, spd: 800,  rate: 720,  spread: 0.24,  pel: 5, size: 3.5, life: 0.55, color: '#ff9a3c', ammoMax: 24, reloadMs: 1600 },
+  sniper:  { key: 'sniper',  name: 'Sniper',         short: 'SNIP', slot: 3, dmg: 50, spd: 1700, rate: 1100, spread: 0.006, pel: 1, size: 5,   life: 1.4,  color: '#7fdcff', ammoMax: 12, reloadMs: 1900 },
+  rocket:  { key: 'rocket',  name: 'Raketenwerfer',  short: 'RAK',  slot: 4, dmg: 60, spd: 540,  rate: 1500, spread: 0,     pel: 1, size: 7,   life: 2.2,  color: '#ff5a5a', splash: 120, ammoMax: 6, reloadMs: 2300 },
 };
 
 // Power-Up Spawnplätze: aus der Seed-Welt (js/world.js: World.puSlots)

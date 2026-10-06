@@ -13,6 +13,7 @@ const S = {
     kills: 0, deaths: 0,
     protectUntil: 0, shieldUntil: 0, deadUntil: 0,
     lastShot: 0, muzzle: 0, flash: 0, dirty: false,
+    reloadUntil: 0,    // Zeitpunkt, ab dem die aktuelle Waffe nachgeladen ist (0 = nicht laden)
   },
   remotes: {},
   bullets: [],
@@ -117,14 +118,18 @@ function tryFire(now) {
   const me = S.me;
   if (S.state !== 'playing' || !me.alive) return;
   const W = WEAPONS[me.weapon];
+  if (me.reloadUntil > now) return; // lädt gerade nach
   if (now - me.lastShot < W.rate) return;
   if (W.ammoMax) {
     if ((me.ammo[W.key] || 0) <= 0) {
-      // Magazin leer → zur Pistole wechseln
-      me.weapon = 'pistol';
+      // Magazin leer → automatisch nachladen
+      me.reloadUntil = now + W.reloadMs;
+      me.reloadW = W.key;
+      me.reloadAmmoBefore = 0;
       me.dirty = true;
       UI.syncWeaponChips();
-      UI.setNotice('Keine Munition – Pistole!', 1400);
+      Sfx.play('reload');
+      UI.setNotice('Lade nach …', 1200);
       return;
     }
     me.ammo[W.key]--;
@@ -256,6 +261,7 @@ function die(killerId) {
   me.deaths++;
   me.deadUntil = S.now + CFG.RESPAWN_MS;
   me.shield = 0; me.shieldUntil = 0;
+  me.reloadUntil = 0; me.reloadW = null;
   me.dirty = true;
   // Waffe droppt am Todestort (Pistole bleibt, Zusatzwaffe geht an den Boden)
   const dropW = me.weapon !== 'pistol' ? me.weapon : me.slots.find((w) => w && w !== 'pistol');
@@ -280,6 +286,7 @@ function respawnMe() {
   me.weapon = 'pistol';
   me.slots = ['pistol', null];
   me.ammo = { pistol: Infinity };
+  me.reloadUntil = 0; me.reloadW = null;
   me.protectUntil = S.now + CFG.PROTECT_MS;
   me.deadUntil = 0;
   me.dirty = true;
@@ -390,6 +397,7 @@ function applyPickup(type) {
 function giveWeapon(w) {
   const me = S.me;
   if (!WEAPONS[w]) return false;
+  if (me.reloadUntil) { me.reloadUntil = 0; me.reloadW = null; UI.syncWeaponChips(); }
   if (me.slots.includes(w)) { me.weapon = w; me.dirty = true; UI.syncWeaponChips(); return false; }
   const free = me.slots.indexOf(null);
   const idx = free >= 0 ? free : me.slots.indexOf(me.weapon);
@@ -427,6 +435,7 @@ function startGameState() {
   me.weapon = 'pistol';
   me.slots = ['pistol', null];
   me.ammo = { pistol: Infinity };
+  me.reloadUntil = 0; me.reloadW = null;
   me.kills = 0; me.deaths = 0;
   const sp = pickSpawn();
   me.x = sp.x; me.y = sp.y;
@@ -505,6 +514,18 @@ function update(dt) {
     }
   }
   if (fire) tryFire(now);
+
+  // Nachgeladen → Magazin wieder befüllen + deutliche Anzeige
+  if (me.reloadUntil && now >= me.reloadUntil) {
+    const RW = WEAPONS[me.reloadW] || WEAPONS[me.weapon];
+    if (RW.ammoMax && me.slots.includes(RW.key)) me.ammo[RW.key] = RW.ammoMax;
+    me.reloadUntil = 0;
+    me.reloadW = null;
+    me.dirty = true;
+    UI.syncWeaponChips();
+    UI.reloadDone();
+    Sfx.play('reloadDone');
+  }
 
   // Spielwelt
   updateBullets(dt);
@@ -695,6 +716,7 @@ const Game = {
     UI.init();
     Input.init(canvas);
     Input.onWeaponSlot = (n) => Game.setWeaponBySlot(n);
+    Input.onReload = () => Game.reload();
     Net.init();
     requestAnimationFrame(frame);
   },
@@ -725,9 +747,25 @@ const Game = {
     if (!WEAPONS[w] || !me.alive) return;
     if (!me.slots.includes(w)) return;
     if (me.weapon === w) return;
+    if (me.reloadUntil) { me.reloadUntil = 0; me.reloadW = null; }
     me.weapon = w;
     me.dirty = true;
     Sfx.play('ui');
+    UI.syncWeaponChips();
+  },
+
+  // Manuelles Nachladen (R): aktive Waffe mit Magazin wieder befüllen
+  reload() {
+    const me = S.me;
+    if (S.state !== 'playing' || !me.alive) return;
+    const W = WEAPONS[me.weapon];
+    if (!W.ammoMax) return;
+    if ((me.ammo[W.key] || 0) >= W.ammoMax) return;
+    if (me.reloadUntil > S.now) return;
+    me.reloadUntil = S.now + W.reloadMs;
+    me.reloadW = W.key;
+    me.dirty = true;
+    Sfx.play('reload');
     UI.syncWeaponChips();
   },
 

@@ -63,7 +63,8 @@ const UI = {
     if (!e.weapons) return;
     const me = S.me;
     const sig = me.slots.join(',') + '|' + me.weapon + '|' + me.alive +
-      '|' + me.slots.map((w) => (w && WEAPONS[w].ammoMax ? me.ammo[w] | 0 : 0)).join(',');
+      '|' + me.slots.map((w) => (w && WEAPONS[w].ammoMax ? me.ammo[w] | 0 : 0)).join(',') +
+      '|' + (me.reloadUntil > S.now ? 'R' : '');
     if (e.weapons.dataset.sig === sig) return;
     e.weapons.dataset.sig = sig;
     e.weapons.textContent = '';
@@ -79,7 +80,20 @@ const UI = {
       if (w) {
         btn.dataset.w = w;
         const W = WEAPONS[w];
-        nm.textContent = W.short + (W.ammoMax ? ' ' + (me.ammo[w] | 0) : '');
+        nm.textContent = W.short;
+        if (W.ammoMax) {
+          const am = document.createElement('span');
+          am.className = 'ammo';
+          if (me.reloadUntil > S.now && me.weapon === w) am.textContent = 'R';
+          else am.textContent = (me.ammo[w] | 0);
+          btn.appendChild(am);
+          if (me.reloadUntil > S.now && me.weapon === w) {
+            const bar = document.createElement('span');
+            bar.className = 'rbar';
+            btn.appendChild(bar);
+            btn.classList.add('reloading');
+          }
+        }
         btn.classList.toggle('sel', me.weapon === w && me.alive);
         btn.disabled = !me.alive;
       } else {
@@ -90,6 +104,33 @@ const UI = {
       btn.append(key, nm);
       e.weapons.appendChild(btn);
     });
+  },
+
+  // Reload-Fortschritt (jeden Frame) + Fertig-Blitz
+  reloadTick() {
+    const e = this.els;
+    const me = S.me;
+    if (!me.reloadUntil || me.reloadUntil <= S.now) return;
+    const W = WEAPONS[me.weapon];
+    if (!W.ammoMax) return;
+    const chip = e.weapons.querySelector('.wchip[data-w="' + me.weapon + '"]');
+    if (!chip) return;
+    const am = chip.querySelector('.ammo');
+    if (am) am.textContent = 'R';
+    const bar = chip.querySelector('.rbar');
+    if (!bar) return;
+    const frac = clamp(1 - (me.reloadUntil - S.now) / W.reloadMs, 0, 1);
+    bar.style.width = (frac * 100) + '%';
+  },
+
+  reloadDone() {
+    const chip = this.els.weapons.querySelector('.wchip.sel');
+    if (chip) {
+      chip.classList.add('flashing');
+      setTimeout(() => chip.classList.remove('flashing'), 650);
+    }
+    const am = this.els.weapons.querySelector('.wchip.sel .ammo');
+    if (am) am.textContent = (S.me.ammo[S.me.weapon] | 0);
   },
 
   // ---------- Zustandswechsel ----------
@@ -175,6 +216,8 @@ const UI = {
     const e = this.els;
     const me = S.me;
     if (!e.hud) return;
+
+    this.reloadTick();
 
     const hp = clamp(me.hp, 0, CFG.MAX_HP);
     e.hpFill.style.width = (hp / CFG.MAX_HP * 100) + '%';

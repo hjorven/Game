@@ -77,6 +77,8 @@ const Sfx = {
       case 'death':  this.tone(330, 0.5, 'sawtooth', 0.06, 60); break;
       case 'explode':this.noise(0.4, 0.09, 700); this.tone(90, 0.35, 'sawtooth', 0.06, 40); break;
       case 'pickup': this.tone(620, 0.08, 'square', 0.045); this.tone(930, 0.12, 'square', 0.04); break;
+      case 'reload': this.noise(0.1, 0.04, 900); this.tone(240, 0.06, 'square', 0.03, 160); break;
+      case 'reloadDone': this.tone(520, 0.09, 'square', 0.045); this.tone(780, 0.12, 'square', 0.04); break;
       case 'start':  this.tone(440, 0.1, 'square', 0.05); this.tone(660, 0.1, 'square', 0.05); this.tone(880, 0.16, 'square', 0.05); break;
       case 'end':    this.tone(880, 0.12, 'square', 0.05); this.tone(660, 0.12, 'square', 0.05); this.tone(440, 0.3, 'square', 0.05); break;
       case 'ui':     this.tone(520, 0.05, 'square', 0.035); break;
