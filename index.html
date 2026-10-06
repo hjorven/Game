@@ -2,377 +2,515 @@
 <html lang="de">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>2D Top-Down Shooter</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>ARENA – 2D Top-Down Multiplayer Shooter</title>
+  <meta name="theme-color" content="#12151b">
+  <link rel="icon" href="data:,">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="description" content="2D Top-Down Multiplayer Shooter mit Echtzeit-Multiplayer (Supabase), Touch-Steuerung und drei Spielmodi.">
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
-    body { background: #1a1a1a; color: white; font-family: sans-serif; overflow: hidden; }
-    canvas { display: block; background: #222; }
-    #ui { position: absolute; top: 10px; left: 10px; z-index: 10; pointer-events: none; }
-    #status { font-weight: bold; color: #ffcc00; }
+    :root {
+      --bg: #12151b;
+      --panel: #1a1f28;
+      --panel2: #222835;
+      --line: #333c4d;
+      --txt: #e8edf5;
+      --dim: #93a0b4;
+      --acc: #ffd54a;
+      --blue: #40c4ff;
+      --red: #ff5252;
+      --green: #69f0ae;
+      --sa-t: env(safe-area-inset-top, 0px);
+      --sa-b: env(safe-area-inset-bottom, 0px);
+      --sa-l: env(safe-area-inset-left, 0px);
+      --sa-r: env(safe-area-inset-right, 0px);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body {
+      width: 100%; height: 100%;
+      background: var(--bg);
+      color: var(--txt);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      overflow: hidden;
+      overscroll-behavior: none;
+      -webkit-user-select: none; user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #c {
+      position: fixed; inset: 0;
+      touch-action: none;
+      display: block;
+      z-index: 1;
+    }
+    .hidden { display: none !important; }
+
+    /* ---------- HUD ---------- */
+    #hud {
+      position: fixed; inset: 0;
+      z-index: 10; pointer-events: none;
+      padding: calc(8px + var(--sa-t)) calc(10px + var(--sa-r)) calc(8px + var(--sa-b)) calc(10px + var(--sa-l));
+    }
+    #hpWrap {
+      position: absolute; top: calc(10px + var(--sa-t)); left: calc(10px + var(--sa-l));
+      width: 186px;
+    }
+    #hpBar {
+      position: relative; height: 20px;
+      background: rgba(0,0,0,.6);
+      border: 1px solid rgba(255,255,255,.25);
+      border-radius: 6px; overflow: hidden;
+    }
+    #hpFill {
+      position: absolute; inset: 0 auto 0 0;
+      width: 100%;
+      background: linear-gradient(180deg, #7dff9e, #35c96a);
+      transition: width .12s linear;
+    }
+    #hpText {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 12px;
+      text-shadow: 0 1px 2px rgba(0,0,0,.8);
+    }
+    #shWrap {
+      position: relative; height: 7px; margin-top: 3px;
+      background: rgba(0,0,0,.6);
+      border: 1px solid rgba(64,196,255,.5);
+      border-radius: 4px; overflow: hidden;
+    }
+    #shFill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--blue); }
+    #buffs {
+      margin-top: 4px; font-size: 11px; font-weight: 700;
+      color: var(--blue); text-shadow: 0 1px 2px #000;
+      min-height: 14px;
+    }
+
+    #topc {
+      position: absolute; top: calc(8px + var(--sa-t)); left: 50%;
+      transform: translateX(-50%);
+      text-align: center; min-width: 150px;
+    }
+    #modeLbl {
+      font-size: 11px; font-weight: 800; letter-spacing: .14em;
+      color: var(--acc); text-transform: uppercase;
+      text-shadow: 0 1px 3px #000;
+    }
+    #timer {
+      font-size: 30px; font-weight: 900; line-height: 1.05;
+      text-shadow: 0 2px 6px #000;
+      font-variant-numeric: tabular-nums;
+    }
+    #subLbl { font-size: 11px; color: var(--dim); font-weight: 700; min-height: 14px; }
+    #kd {
+      position: absolute; top: calc(12px + var(--sa-t)); left: calc(10px + var(--sa-l));
+      margin-top: 66px;
+      font-size: 13px; font-weight: 800;
+      text-shadow: 0 1px 3px #000; color: var(--txt);
+    }
+
+    #killfeed {
+      position: absolute;
+      top: calc(178px + var(--sa-t)); right: calc(12px + var(--sa-r));
+      width: 230px; text-align: right;
+      display: flex; flex-direction: column; gap: 4px;
+      overflow: hidden;
+    }
+    .kf {
+      font-size: 12px; font-weight: 700;
+      background: rgba(0,0,0,.55);
+      border-radius: 5px; padding: 3px 8px;
+      display: inline-block; align-self: flex-end;
+      animation: kfin .18s ease-out;
+      text-shadow: 0 1px 2px #000;
+    }
+    @keyframes kfin { from { transform: translateX(30px); opacity: 0; } }
+
+    #weapons {
+      position: absolute; bottom: calc(12px + var(--sa-b)); left: 50%;
+      transform: translateX(-50%);
+      display: flex; gap: 8px;
+      pointer-events: auto;
+    }
+    .wchip {
+      width: 64px; height: 46px;
+      background: rgba(16,20,28,.82);
+      border: 2px solid var(--line);
+      border-radius: 10px;
+      color: var(--txt);
+      font: inherit; cursor: pointer;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 1px;
+      transition: border-color .1s, transform .1s;
+    }
+    .wchip:active { transform: scale(.94); }
+    .wchip .key { font-size: 10px; color: var(--dim); font-weight: 800; }
+    .wchip .wname { font-size: 10px; font-weight: 800; letter-spacing: .02em; }
+    .wchip.sel { border-color: var(--acc); box-shadow: 0 0 10px rgba(255,213,74,.35); }
+    .wchip.locked { opacity: .28; }
+
+    #topBtns {
+      position: absolute; top: calc(10px + var(--sa-t)); right: calc(12px + var(--sa-r));
+      display: flex; gap: 6px; pointer-events: auto;
+    }
+    .pill {
+      background: rgba(16,20,28,.82);
+      border: 1px solid var(--line);
+      color: var(--txt);
+      border-radius: 999px;
+      font: inherit; font-size: 11px; font-weight: 800;
+      padding: 7px 12px; cursor: pointer;
+      letter-spacing: .04em;
+    }
+    .pill:active { transform: scale(.95); }
+    .pill.off { color: var(--dim); text-decoration: line-through; }
+
+    #dead {
+      position: absolute; bottom: 26%; left: 50%;
+      transform: translateX(-50%);
+      background: rgba(120,20,20,.85);
+      border: 1px solid rgba(255,120,120,.6);
+      padding: 10px 18px; border-radius: 10px;
+      font-weight: 800; font-size: 15px;
+      text-align: center; white-space: nowrap;
+    }
+
+    #notice {
+      position: fixed; top: 30%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 20; pointer-events: none;
+      font-size: clamp(16px, 3.5vw, 24px); font-weight: 900;
+      text-shadow: 0 2px 10px #000, 0 0 24px rgba(0,0,0,.8);
+      text-align: center; white-space: nowrap;
+      transition: opacity .35s;
+    }
+    #notice.hide { opacity: 0; }
+
+    /* ---------- Scoreboard ---------- */
+    #board {
+      position: fixed; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      z-index: 30;
+      width: min(440px, 92vw);
+      background: rgba(20,25,34,.96);
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 14px 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,.6);
+    }
+    .board-head {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .board-head b { letter-spacing: .1em; font-size: 13px; color: var(--acc); }
+    .board-head button {
+      background: none; border: 1px solid var(--line); color: var(--dim);
+      border-radius: 6px; font: inherit; font-size: 10px; font-weight: 800;
+      padding: 4px 8px; cursor: pointer;
+    }
+    .team-scores { display: flex; gap: 14px; justify-content: center; margin-bottom: 8px; }
+    .tchip { font-weight: 900; font-size: 16px; letter-spacing: .05em; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { padding: 6px 8px; text-align: left; }
+    th {
+      font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
+      color: var(--dim); border-bottom: 1px solid var(--line);
+    }
+    td { border-bottom: 1px solid rgba(255,255,255,.06); }
+    tr.me td { background: rgba(255,213,74,.12); font-weight: 800; }
+    tr.won td { color: var(--green); font-weight: 700; }
+    tr.out td { opacity: .45; }
+
+    /* ---------- Overlays ---------- */
+    .overlay {
+      position: fixed; inset: 0; z-index: 40;
+      background: rgba(8,10,14,.88);
+      display: flex; align-items: center; justify-content: center;
+      padding: calc(14px + var(--sa-t)) calc(14px + var(--sa-r)) calc(14px + var(--sa-b)) calc(14px + var(--sa-l));
+      overflow-y: auto;
+      -webkit-overflow-scrolling: touch;
+    }
+    #results { z-index: 50; background: rgba(8,10,14,.72); }
+
+    .panel {
+      width: min(760px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: clamp(16px, 3vw, 28px);
+      box-shadow: 0 30px 80px rgba(0,0,0,.7);
+      margin: auto;
+    }
+    .panel.narrow { width: min(480px, 100%); }
+    .title {
+      font-size: clamp(30px, 7vw, 52px);
+      font-weight: 950; letter-spacing: .18em;
+      text-align: center;
+      background: linear-gradient(180deg, #fff, var(--acc));
+      -webkit-background-clip: text; background-clip: text;
+      -webkit-text-fill-color: transparent;
+      line-height: 1.1;
+    }
+    .subtitle {
+      text-align: center; color: var(--dim);
+      font-size: 13px; margin-bottom: 18px; letter-spacing: .06em;
+    }
+    .net-line { text-align: center; font-size: 12px; margin-bottom: 12px; }
+    .net-line span { color: var(--green); font-weight: 800; }
+    .net-line span.err { color: var(--red); }
+
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+
+    .lbl {
+      display: block; font-size: 10px; font-weight: 800;
+      letter-spacing: .12em; text-transform: uppercase;
+      color: var(--dim); margin: 12px 0 5px;
+    }
+    .inp {
+      width: 100%;
+      background: var(--panel2);
+      border: 1px solid var(--line);
+      color: var(--txt);
+      border-radius: 9px;
+      font: inherit; font-size: 15px;
+      padding: 10px 12px;
+      -webkit-user-select: text; user-select: text;
+    }
+    .inp:focus { outline: 2px solid var(--acc); border-color: transparent; }
+    .row { display: flex; gap: 8px; }
+    .row .inp { flex: 1; min-width: 0; }
+
+    .btn {
+      background: var(--acc); color: #16130a;
+      border: none; border-radius: 10px;
+      font: inherit; font-weight: 900; font-size: 15px;
+      padding: 12px 18px; cursor: pointer;
+      letter-spacing: .03em;
+      transition: transform .08s, filter .1s;
+    }
+    .btn:hover { filter: brightness(1.08); }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .45; cursor: default; }
+    .btn.ghost {
+      background: var(--panel2); color: var(--txt);
+      border: 1px solid var(--line); font-size: 13px;
+    }
+    .btn.small { font-size: 12px; padding: 9px 12px; }
+    .btn.blue { background: var(--blue); color: #06222e; }
+
+    #modeCards { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 8px; }
+    .mcard {
+      background: var(--panel2);
+      border: 2px solid var(--line);
+      border-radius: 11px;
+      color: var(--txt);
+      font: inherit; text-align: left;
+      padding: 10px 12px; cursor: pointer;
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .mcard b { font-size: 14px; }
+    .mcard span { font-size: 11px; color: var(--dim); line-height: 1.3; }
+    .mcard.sel { border-color: var(--acc); background: rgba(255,213,74,.1); }
+    .mcard:disabled { opacity: .5; cursor: default; }
+    .mcard:disabled.sel { opacity: .9; }
+
+    #btnStart { width: 100%; margin-top: 14px; font-size: 17px; padding: 14px; }
+    #hostNote { text-align: center; font-size: 11px; color: var(--dim); margin-top: 7px; }
+
+    .sub {
+      font-size: 11px; font-weight: 800; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--acc);
+      margin: 16px 0 7px;
+    }
+    #roster { display: flex; flex-direction: column; gap: 4px; }
+    .roster-head { font-size: 11px; color: var(--dim); margin-bottom: 3px; }
+    .roster-row {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--panel2); border-radius: 8px;
+      padding: 7px 10px; font-size: 13px; font-weight: 700;
+    }
+    .roster-row.me { outline: 1px solid rgba(255,213,74,.5); }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex: 0 0 auto; }
+    .rname { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .host-tag {
+      font-size: 9px; font-weight: 900; letter-spacing: .1em;
+      background: var(--acc); color: #16130a;
+      border-radius: 4px; padding: 2px 5px;
+    }
+
+    .share { display: flex; align-items: center; gap: 8px; background: var(--panel2); border: 1px dashed var(--line); border-radius: 9px; padding: 7px 10px; }
+    #shareLink { flex: 1; font-size: 11px; color: var(--blue); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; -webkit-user-select: all; user-select: all; }
+
+    .scores-note { font-size: 11px; color: var(--dim); padding: 6px 0; }
+    #scoresBody td { font-size: 12px; padding: 5px 8px; }
+
+    .controls {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px;
+      font-size: 11.5px; color: var(--dim); line-height: 1.5;
+      background: var(--panel2); border-radius: 10px; padding: 10px 12px;
+    }
+    .controls b { color: var(--txt); }
+    kbd {
+      background: #0e1117; border: 1px solid var(--line);
+      border-bottom-width: 2px; border-radius: 4px;
+      padding: 0 5px; font-size: 10.5px; font-family: inherit; font-weight: 800;
+      color: var(--txt);
+    }
+
+    /* Ergebnis */
+    #resTitle {
+      font-size: clamp(24px, 6vw, 40px); font-weight: 950;
+      text-align: center; letter-spacing: .04em;
+    }
+    #resTitle.win { color: var(--green); }
+    #resSub { text-align: center; color: var(--dim); font-size: 13px; margin: 4px 0 14px; }
+    #resBody { margin-bottom: 16px; }
+    .res-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+    #resWait { text-align: center; font-size: 12px; color: var(--dim); margin-top: 10px; }
+
+    #loading {
+      position: fixed; inset: 0; z-index: 99;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; letter-spacing: .2em; color: var(--acc);
+    }
+    noscript { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; }
   </style>
 </head>
 <body>
 
-  <div id="ui">
-    <h1>2D Top-Down Shooter</h1>
-    <p>Status: <span id="status">Verbinde...</span></p>
+  <canvas id="c"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div id="hpWrap">
+      <div id="hpBar"><div id="hpFill"></div><div id="hpText">100</div></div>
+      <div id="shWrap" class="hidden"><div id="shFill"></div></div>
+      <div id="buffs"></div>
+    </div>
+    <div id="kd">K 0 · D 0</div>
+
+    <div id="topc">
+      <div id="modeLbl">Deathmatch</div>
+      <div id="timer">--:--</div>
+      <div id="subLbl"></div>
+    </div>
+
+    <div id="topBtns">
+      <button id="btnBoard" class="pill">Tabelle (Tab)</button>
+      <button id="btnMute" class="pill">Ton: an</button>
+    </div>
+
+    <div id="killfeed"></div>
+    <div id="dead" class="hidden"></div>
+
+    <div id="weapons">
+      <button class="wchip" data-w="pistol"><span class="key">1</span><span class="wname">Pistole</span></button>
+      <button class="wchip" data-w="shotgun"><span class="key">2</span><span class="wname">Schrot</span></button>
+      <button class="wchip" data-w="sniper"><span class="key">3</span><span class="wname">Sniper</span></button>
+      <button class="wchip" data-w="rocket"><span class="key">4</span><span class="wname">Rakete</span></button>
+    </div>
   </div>
 
-  <canvas id="gameCanvas"></canvas>
+  <div id="notice" class="hide"></div>
 
-  <script>
-    const statusEl = document.getElementById('status');
+  <!-- Scoreboard -->
+  <div id="board" class="hidden">
+    <div class="board-head">
+      <b>TABELLE</b>
+      <button id="btnBoardClose">Schliessen</button>
+    </div>
+    <div id="boardTeams"></div>
+    <div id="boardBody"></div>
+  </div>
 
-    // 1. SUPABASE INITIALISIERUNG
-    const SUPABASE_URL = 'https://hnuilozoehvmosgumrsc.supabase.co';
-    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhudWlsb3pvZWh2bW9zZ3VtcnNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyNzY3NTEsImV4cCI6MjEwNjg1Mjc1MX0.ztp_BEa420xSujbBCWLz1QHLOL4YDHE-jWQmP8ucTBo';
+  <!-- Lobby -->
+  <div id="lobby" class="overlay">
+    <div class="panel">
+      <div class="title">ARENA</div>
+      <div class="subtitle">2D Top-Down Multiplayer Shooter · Echtzeit über Supabase</div>
+      <div class="net-line">Status: <span id="netStatus">Verbinde …</span></div>
 
-    if (!window.supabase) {
-      statusEl.innerText = 'Fehler: Supabase SDK nicht geladen!';
-      statusEl.style.color = 'red';
-      throw new Error('Supabase SDK missing');
-    }
+      <div class="grid2">
+        <div>
+          <label class="lbl" for="nameIn">Dein Name</label>
+          <input id="nameIn" class="inp" maxlength="14" autocomplete="off" spellcheck="false">
 
-    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+          <label class="lbl">Raum (freundlich geteilt)</label>
+          <div class="row">
+            <input id="roomIn" class="inp" maxlength="8" autocomplete="off" spellcheck="false">
+            <button id="btnRoom" class="btn ghost small">Beitreten</button>
+          </div>
+          <div class="share" style="margin-top:8px">
+            <span id="shareLink"></span>
+            <button id="btnCopy" class="btn ghost small">Kopieren</button>
+          </div>
 
-    // 2. CANVAS SETUP
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    
-    function resizeCanvas() {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-    }
-    resizeCanvas();
-    window.addEventListener('resize', resizeCanvas);
+          <div class="lbl">Spielmodus</div>
+          <div id="modeCards">
+            <button class="mcard sel" data-m="ffa"><b>Deathmatch</b><span>3 Min. – wer hat die meisten Kills?</span></button>
+            <button class="mcard" data-m="br"><b>Battle Royale</b><span>Zone schrumpft – letzter Überlebender gewinnt</span></button>
+            <button class="mcard" data-m="tdm"><b>Team-Deathmatch</b><span>3 Min. – Rot gegen Blau!</span></button>
+          </div>
 
-    // Player State
-    const MAX_HP = 300;
-    const myId = 'player_' + Math.random().toString(36).substr(2, 9);
-    let player = {
-      id: myId,
-      x: Math.random() * (canvas.width - 100) + 50,
-      y: Math.random() * (canvas.height - 100) + 50,
-      angle: 0,
-      color: '#' + Math.floor(Math.random() * 16777215).toString(16),
-      hp: MAX_HP
-    };
+          <button id="btnStart" class="btn">Runde starten</button>
+          <div id="hostNote"></div>
+        </div>
 
-    let otherPlayers = {};
-    let bullets = [];
-    const moveSpeed = 4;
+        <div>
+          <div id="roster"></div>
 
-    // Schuss-Einstellungen
-    const FIRE_INTERVAL_MS = 150; 
-    const DAMAGE_PER_HIT = 7;     
-    let lastShotTime = 0;
-    let isShooting = false;
-    let aimTarget = { x: 0, y: 0 };
+          <div class="sub">Top 10 Highscores (dieser Raum)</div>
+          <table>
+            <thead><tr><th>#</th><th>Spieler</th><th>Kills</th><th>Modus</th><th>Datum</th></tr></thead>
+            <tbody id="scoresBody"></tbody>
+          </table>
+          <div id="scoresNote" class="scores-note hidden"></div>
 
-    // Tastatur-Status
-    const keys = { w: false, a: false, s: false, d: false, space: false };
+          <div class="sub">Steuerung</div>
+          <div class="controls">
+            <span><b>PC:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Bewegen</span>
+            <span><b>Touch:</b> linker Daumen = Bewegen</span>
+            <span><b>PC:</b> Maus = Zielen, <kbd>Leertaste</kbd>/Klick = Schiessen</span>
+            <span><b>Touch:</b> rechter Daumen = Zielen &amp; Schiessen</span>
+            <span><b>PC:</b> <kbd>1</kbd>–<kbd>4</kbd> Waffe wechseln</span>
+            <span><b>Touch:</b> aufs Ziel tippen = Schuss</span>
+            <span><b>PC:</b> <kbd>Tab</kbd> Tabelle</span>
+            <span><b>Power-Ups:</b> auf der Map einsammeln</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    window.addEventListener('keydown', (e) => {
-      const k = e.key.toLowerCase();
-      if (k === 'w' || k === 'arrowup') keys.w = true;
-      if (k === 'a' || k === 'arrowleft') keys.a = true;
-      if (k === 's' || k === 'arrowdown') keys.s = true;
-      if (k === 'd' || k === 'arrowright') keys.d = true;
-      if (e.code === 'Space') keys.space = true;
-    });
+  <!-- Ergebnis -->
+  <div id="results" class="overlay hidden">
+    <div class="panel narrow">
+      <div id="resTitle">Runde beendet</div>
+      <div id="resSub"></div>
+      <div id="resBody"></div>
+      <div class="res-actions">
+        <button id="btnAgain" class="btn">Nochmal starten</button>
+        <button id="btnToLobby" class="btn ghost">Zur Lobby</button>
+      </div>
+      <div id="resWait" class="hidden">Wartet auf den Host …</div>
+    </div>
+  </div>
 
-    window.addEventListener('keyup', (e) => {
-      const k = e.key.toLowerCase();
-      if (k === 'w' || k === 'arrowup') keys.w = false;
-      if (k === 'a' || k === 'arrowleft') keys.a = false;
-      if (k === 's' || k === 'arrowdown') keys.s = false;
-      if (k === 'd' || k === 'arrowright') keys.d = false;
-      if (e.code === 'Space') keys.space = false;
-    });
+  <div id="loading">LADEN …</div>
+  <noscript>Dieses Spiel benötigt JavaScript.</noscript>
 
-    // Joystick & Touch
-    let joystick = {
-      active: false,
-      startX: 0,
-      startY: 0,
-      currentX: 0,
-      currentY: 0,
-      maxRadius: 50
-    };
-    let activePointerId = null;
-    let shootingPointerId = null;
-
-    canvas.addEventListener('pointerdown', (e) => {
-      const joystickZoneSize = 250;
-      const isBottomLeft = (e.clientX < joystickZoneSize) && (e.clientY > canvas.height - joystickZoneSize);
-
-      if (isBottomLeft) {
-        joystick.active = true;
-        joystick.startX = e.clientX;
-        joystick.startY = e.clientY;
-        joystick.currentX = e.clientX;
-        joystick.currentY = e.clientY;
-        activePointerId = e.pointerId;
-      } else {
-        isShooting = true;
-        shootingPointerId = e.pointerId;
-        aimTarget = { x: e.clientX, y: e.clientY };
-      }
-    });
-
-    canvas.addEventListener('pointermove', (e) => {
-      if (joystick.active && e.pointerId === activePointerId) {
-        joystick.currentX = e.clientX;
-        joystick.currentY = e.clientY;
-
-        const dx = joystick.currentX - joystick.startX;
-        const dy = joystick.currentY - joystick.startY;
-        const dist = Math.hypot(dx, dy);
-
-        if (dist > 5) {
-          player.angle = Math.atan2(dy, dx);
-          const speedFactor = Math.min(dist / joystick.maxRadius, 1) * moveSpeed;
-          player.x += Math.cos(player.angle) * speedFactor;
-          player.y += Math.sin(player.angle) * speedFactor;
-        }
-      } else if (isShooting && e.pointerId === shootingPointerId) {
-        aimTarget = { x: e.clientX, y: e.clientY };
-      } else if (!joystick.active) {
-        const dx = e.clientX - player.x;
-        const dy = e.clientY - player.y;
-        player.angle = Math.atan2(dy, dx);
-      }
-    });
-
-    const stopInput = (e) => {
-      if (e.pointerId === activePointerId) {
-        joystick.active = false;
-        activePointerId = null;
-      }
-      if (e.pointerId === shootingPointerId) {
-        isShooting = false;
-        shootingPointerId = null;
-      }
-    };
-    canvas.addEventListener('pointerup', stopInput);
-    canvas.addEventListener('pointercancel', stopInput);
-
-    // 3. SUPABASE REALTIME & PRESENCE (Clean Cleanup & HP Sync)
-    const channel = sb.channel('arena_room_1', {
-      config: { 
-        broadcast: { ack: false, self: false },
-        presence: { key: myId }
-      }
-    });
-
-    channel
-      .on('broadcast', { event: 'player-move' }, (data) => {
-        if (data.payload && data.payload.id !== myId) {
-          // Position UND HP synchronisieren
-          otherPlayers[data.payload.id] = data.payload;
-        }
-      })
-      .on('broadcast', { event: 'shoot' }, (data) => {
-        if (data.payload) {
-          bullets.push(data.payload);
-        }
-      })
-      .on('presence', { event: 'leave' }, ({ leftPresences }) => {
-        // Tab geschlossen / Verbindung getrennt -> Spieler löschen
-        leftPresences.forEach((p) => {
-          delete otherPlayers[p.key];
-        });
-      })
-      .subscribe((status, err) => {
-        statusEl.innerText = status;
-        if (status === 'SUBSCRIBED') {
-          statusEl.style.color = '#00ff00';
-          statusEl.innerText = 'Verbunden! ID: ' + myId;
-          // Eigene Anwesenheit an den Server melden
-          channel.track({ online_at: new Date().toISOString(), id: myId });
-        } else {
-          statusEl.style.color = '#ffaa00';
-          if (err) console.error('Subscribe Error:', err);
-        }
-      });
-
-    let lastBroadcastTime = 0;
-    function broadcastPosition() {
-      const now = Date.now();
-      if (now - lastBroadcastTime > 40) { // ~25-30 Updates/Sekunde für flüssige HP/Position
-        channel.send({
-          type: 'broadcast',
-          event: 'player-move',
-          payload: player
-        });
-        lastBroadcastTime = now;
-      }
-    }
-
-    function tryShooting() {
-      const now = Date.now();
-      if (now - lastShotTime < FIRE_INTERVAL_MS) return;
-
-      let angle = player.angle;
-      if (isShooting) {
-        angle = Math.atan2(aimTarget.y - player.y, aimTarget.x - player.x);
-        player.angle = angle;
-      } else if (!keys.space) {
-        return;
-      }
-
-      lastShotTime = now;
-
-      const bullet = {
-        id: Math.random().toString(36).substr(2, 9),
-        shooterId: myId,
-        x: player.x + Math.cos(angle) * 25,
-        y: player.y + Math.sin(angle) * 25,
-        vx: Math.cos(angle) * 12,
-        vy: Math.sin(angle) * 12
-      };
-
-      bullets.push(bullet);
-
-      channel.send({
-        type: 'broadcast',
-        event: 'shoot',
-        payload: bullet
-      });
-    }
-
-    // 4. GAME LOOP
-    function gameLoop() {
-      // WASD Bewegung
-      let moveX = 0;
-      let moveY = 0;
-
-      if (keys.w) moveY -= 1;
-      if (keys.s) moveY += 1;
-      if (keys.a) moveX -= 1;
-      if (keys.d) moveX += 1;
-
-      if (moveX !== 0 || moveY !== 0) {
-        const len = Math.hypot(moveX, moveY);
-        player.x += (moveX / len) * moveSpeed;
-        player.y += (moveY / len) * moveSpeed;
-        
-        if (!joystick.active && !isShooting) {
-          player.angle = Math.atan2(moveY, moveX);
-        }
-      }
-
-      // Spielfeldbegrenzung
-      player.x = Math.max(20, Math.min(canvas.width - 20, player.x));
-      player.y = Math.max(20, Math.min(canvas.height - 20, player.y));
-
-      tryShooting();
-      broadcastPosition();
-
-      // Rendering
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-      // Joystick-Zone anzeigen
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
-      ctx.fillRect(0, canvas.height - 250, 250, 250);
-
-      // Bullets verarbeiten
-      for (let i = bullets.length - 1; i >= 0; i--) {
-        const b = bullets[i];
-        b.x += b.vx;
-        b.y += b.vy;
-
-        ctx.fillStyle = '#ffff00';
-        ctx.beginPath();
-        ctx.arc(b.x, b.y, 5, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Hit-Check gegen eigenen Spieler
-        if (b.shooterId !== myId) {
-          const dist = Math.hypot(b.x - player.x, b.y - player.y);
-          if (dist < 25) {
-            player.hp -= DAMAGE_PER_HIT;
-            bullets.splice(i, 1);
-            if (player.hp <= 0) {
-              alert('Du wurdest eliminiert!');
-              player.hp = MAX_HP;
-              player.x = Math.random() * (canvas.width - 100) + 50;
-              player.y = Math.random() * (canvas.height - 100) + 50;
-            }
-            continue;
-          }
-        }
-
-        if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
-          bullets.splice(i, 1);
-        }
-      }
-
-      // Spieler zeichnen
-      drawPlayer(player);
-      Object.values(otherPlayers).forEach(drawPlayer);
-
-      // Joystick zeichnen
-      if (joystick.active) {
-        drawJoystick();
-      }
-
-      requestAnimationFrame(gameLoop);
-    }
-
-    function drawPlayer(p) {
-      ctx.save();
-      ctx.translate(p.x, p.y);
-      ctx.rotate(p.angle);
-
-      ctx.fillStyle = p.color;
-      ctx.beginPath();
-      ctx.arc(0, 0, 20, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, -4, 25, 8);
-
-      ctx.restore();
-
-      // Healthbar (Echtzeit HP Visualisierung)
-      const barWidth = 40;
-      const currentHp = p.hp !== undefined ? p.hp : MAX_HP;
-      ctx.fillStyle = 'red';
-      ctx.fillRect(p.x - barWidth/2, p.y - 30, barWidth, 5);
-      ctx.fillStyle = '#00ff00';
-      ctx.fillRect(p.x - barWidth/2, p.y - 30, Math.max(0, (currentHp / MAX_HP) * barWidth), 5);
-    }
-
-    function drawJoystick() {
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(joystick.startX, joystick.startY, joystick.maxRadius, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      const dx = joystick.currentX - joystick.startX;
-      const dy = joystick.currentY - joystick.startY;
-      const dist = Math.hypot(dx, dy);
-      const angle = Math.atan2(dy, dx);
-
-      const stickDist = Math.min(dist, joystick.maxRadius);
-      const stickX = joystick.startX + Math.cos(angle) * stickDist;
-      const stickY = joystick.startY + Math.sin(angle) * stickDist;
-
-      ctx.beginPath();
-      ctx.arc(stickX, stickY, 20, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.fill();
-      ctx.restore();
-    }
-
-    gameLoop();
-  </script>
+  <script src="js/config.js"></script>
+  <script src="js/audio.js"></script>
+  <script src="js/net.js"></script>
+  <script src="js/input.js"></script>
+  <script src="js/render.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/game.js"></script>
+  <script>Game.init();</script>
 </body>
 </html>
