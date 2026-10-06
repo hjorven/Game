@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>2D Top-Down Shooter</title>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Supabase JS Library (UMD) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
     body { background: #1a1a1a; color: white; font-family: sans-serif; overflow: hidden; }
@@ -23,9 +24,9 @@
 
   <script>
     // 1. SUPABASE INITIALISIERUNG
-    const SUPABASE_URL = 'DEINE_SUPABASE_URL';
-    const SUPABASE_KEY = 'DEIN_SUPABASE_ANON_KEY';
-    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    const SUPABASE_URL = 'https://msvj0STldeNel5buD3csmA.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_msvj0STldeNel5buD3csmA__RwIbNTU';
+    const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     // 2. CANVAS SETUP
     const canvas = document.getElementById('gameCanvas');
@@ -47,15 +48,13 @@
     let otherPlayers = {};
     let bullets = [];
 
-    // 3. TOUCH & PENCIL STEUERUNG (iPad)
+    // 3. TOUCH & PENCIL STEUERUNG (iPad / Mobile)
     let touchStartPos = null;
     
     canvas.addEventListener('pointerdown', (e) => {
-      // Wenn rechts getippt wird = Schießen
       if (e.clientX > canvas.width / 2) {
         shootBullet(e.clientX, e.clientY);
       } else {
-        // Linke Seite = Bewegungsursprung
         touchStartPos = { x: e.clientX, y: e.clientY };
       }
     });
@@ -74,7 +73,7 @@
     canvas.addEventListener('pointerup', () => { touchStartPos = null; });
 
     // 4. SUPABASE REALTIME SYNC
-    const channel = supabase.channel('arena_room_1');
+    const channel = sb.channel('arena_room_1');
 
     channel
       .on('broadcast', { event: 'player-move' }, ({ payload }) => {
@@ -134,7 +133,7 @@
         ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
         ctx.fill();
 
-        // Einfache Hit-Kollision mit mir selbst
+        // Kollision mit lokalem Spieler
         if (b.shooterId !== myId) {
           const dist = Math.hypot(b.x - player.x, b.y - player.y);
           if (dist < 20) {
@@ -170,13 +169,13 @@
       ctx.arc(0, 0, 20, 0, Math.PI * 2);
       ctx.fill();
 
-      // Kanone / Lauf
+      // Kanone
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, -4, 25, 8);
 
       ctx.restore();
 
-      // HP Anzeige
+      // HP-Balken
       ctx.fillStyle = 'red';
       ctx.fillRect(p.x - 20, p.y - 30, 40, 5);
       ctx.fillStyle = 'green';
