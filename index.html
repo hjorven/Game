@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>2D Top-Down Shooter</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
+    body { background: #1a1a1a; color: white; font-family: sans-serif; overflow: hidden; }
+    canvas { display: block; background: #222; }
+    #ui { position: absolute; top: 10px; left: 10px; z-index: 10; pointer-events: none; }
+  </style>
+</head>
+<body>
+
+  <div id="ui">
+    <h1>2D Top-Down Shooter</h1>
+    <p>Status: <span id="status">Verbinde...</span></p>
+  </div>
+
+  <canvas id="gameCanvas"></canvas>
+
+  <script>
+    // 1. SUPABASE INITIALISIERUNG
+    const SUPABASE_URL = 'DEINE_SUPABASE_URL';
+    const SUPABASE_KEY = 'DEIN_SUPABASE_ANON_KEY';
+    const supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // 2. CANVAS SETUP
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // Local Player State
+    const myId = 'player_' + Math.random().toString(36).substr(2, 9);
+    let player = {
+      id: myId,
+      x: Math.random() * (canvas.width - 100) + 50,
+      y: Math.random() * (canvas.height - 100) + 50,
+      angle: 0,
+      color: '#' + Math.floor(Math.random()*16777215).toString(16),
+      hp: 100
+    };
+
+    let otherPlayers = {};
+    let bullets = [];
+
+    // 3. TOUCH & PENCIL STEUERUNG (iPad)
+    let touchStartPos = null;
+    
+    canvas.addEventListener('pointerdown', (e) => {
+      // Wenn rechts getippt wird = Schießen
+      if (e.clientX > canvas.width / 2) {
+        shootBullet(e.clientX, e.clientY);
+      } else {
+        // Linke Seite = Bewegungsursprung
+        touchStartPos = { x: e.clientX, y: e.clientY };
+      }
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (touchStartPos && e.buttons > 0) {
+        const dx = e.clientX - touchStartPos.x;
+        const dy = e.clientY - touchStartPos.y;
+        player.x += dx * 0.05;
+        player.y += dy * 0.05;
+        player.angle = Math.atan2(dy, dx);
+        broadcastPosition();
+      }
+    });
+
+    canvas.addEventListener('pointerup', () => { touchStartPos = null; });
+
+    // 4. SUPABASE REALTIME SYNC
+    const channel = supabase.channel('arena_room_1');
+
+    channel
+      .on('broadcast', { event: 'player-move' }, ({ payload }) => {
+        if (payload.id !== myId) {
+          otherPlayers[payload.id] = payload;
+        }
+      })
+      .on('broadcast', { event: 'shoot' }, ({ payload }) => {
+        if (payload.shooterId !== myId) {
+          bullets.push(payload);
+        }
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          document.getElementById('status').innerText = 'Bereit! ID: ' + myId;
+          broadcastPosition();
+        }
+      });
+
+    function broadcastPosition() {
+      channel.send({
+        type: 'broadcast',
+        event: 'player-move',
+        payload: player
+      });
+    }
+
+    function shootBullet(targetX, targetY) {
+      const angle = Math.atan2(targetY - player.y, targetX - player.x);
+      const bullet = {
+        id: Math.random(),
+        shooterId: myId,
+        x: player.x,
+        y: player.y,
+        vx: Math.cos(angle) * 12,
+        vy: Math.sin(angle) * 12
+      };
+      bullets.push(bullet);
+
+      channel.send({
+        type: 'broadcast',
+        event: 'shoot',
+        payload: bullet
+      });
+    }
+
+    // 5. GAME LOOP & RENDERING
+    function gameLoop() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Kugel-Update
+      bullets.forEach((b, i) => {
+        b.x += b.vx;
+        b.y += b.vy;
+        ctx.fillStyle = '#ffff00';
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Einfache Hit-Kollision mit mir selbst
+        if (b.shooterId !== myId) {
+          const dist = Math.hypot(b.x - player.x, b.y - player.y);
+          if (dist < 20) {
+            player.hp -= 10;
+            bullets.splice(i, 1);
+            if (player.hp <= 0) {
+              alert('Du wurdest abgeschossen!');
+              player.hp = 100;
+              player.x = Math.random() * (canvas.width - 100) + 50;
+              player.y = Math.random() * (canvas.height - 100) + 50;
+            }
+          }
+        }
+      });
+
+      // Eigenen Spieler zeichnen
+      drawPlayer(player);
+
+      // Andere Spieler zeichnen
+      Object.values(otherPlayers).forEach(drawPlayer);
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function drawPlayer(p) {
+      ctx.save();
+      ctx.translate(p.x, p.y);
+      ctx.rotate(p.angle);
+
+      // Körper
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(0, 0, 20, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Kanone / Lauf
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, -4, 25, 8);
+
+      ctx.restore();
+
+      // HP Anzeige
+      ctx.fillStyle = 'red';
+      ctx.fillRect(p.x - 20, p.y - 30, 40, 5);
+      ctx.fillStyle = 'green';
+      ctx.fillRect(p.x - 20, p.y - 30, (p.hp / 100) * 40, 5);
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
