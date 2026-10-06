@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>ARENA – 2D Top-Down Multiplayer Shooter</title>
-  <meta name="theme-color" content="#12151b">
+  <meta name="theme-color" content="#09090b">
   <link rel="icon" href="data:,">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
@@ -13,22 +13,23 @@
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <style>
     :root {
-      --bg: #12151b;
-      --panel: #1a1f28;
-      --panel2: #222835;
-      --line: #333c4d;
-      --txt: #e8edf5;
-      --dim: #93a0b4;
+      --bg: #09090b;
+      --panel: #18181b;
+      --panel2: #27272a;
+      --line: #3f3f46;
+      --line-soft: #27272a;
+      --txt: #fafafa;
+      --dim: #a1a1aa;
       --acc: #ffd54a;
-      --blue: #40c4ff;
-      --red: #ff5252;
-      --green: #69f0ae;
+      --blue: #60a5fa;
+      --red: #f87171;
+      --green: #4ade80;
       --sa-t: env(safe-area-inset-top, 0px);
       --sa-b: env(safe-area-inset-bottom, 0px);
       --sa-l: env(safe-area-inset-left, 0px);
       --sa-r: env(safe-area-inset-right, 0px);
     }
-    * { margin: 0; padding: 0; box-sizing: border-box; touch-action: manipulation; }
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; border-radius: 0; touch-action: manipulation; }
     html, body {
       width: 100%; height: 100%;
       background: var(--bg);
@@ -47,6 +48,7 @@
       z-index: 1;
     }
     .hidden { display: none !important; }
+    :focus-visible { outline: 2px solid var(--txt); outline-offset: 2px; }
 
     /* ---------- HUD ---------- */
     #hud {
@@ -59,41 +61,41 @@
       width: 186px;
     }
     #hpBar {
-      position: relative; height: 20px;
-      background: rgba(0,0,0,.6);
-      border: 1px solid rgba(255,255,255,.25);
-      border-radius: 6px; overflow: hidden;
+      position: relative; height: 16px;
+      background: rgba(9,9,11,.72);
+      border: 1px solid var(--line);
+      overflow: hidden;
     }
     #hpFill {
       position: absolute; inset: 0 auto 0 0;
       width: 100%;
-      background: linear-gradient(180deg, #7dff9e, #35c96a);
+      background: #22c55e;
       transition: width .12s linear;
     }
     #hpText {
       position: absolute; inset: 0;
       display: flex; align-items: center; justify-content: center;
-      font-weight: 800; font-size: 12px;
-      text-shadow: 0 1px 2px rgba(0,0,0,.8);
+      font-weight: 700; font-size: 10px; font-variant-numeric: tabular-nums;
+      color: #052e16;
     }
     #shWrap {
-      position: relative; height: 7px; margin-top: 3px;
-      background: rgba(0,0,0,.6);
-      border: 1px solid rgba(64,196,255,.5);
-      border-radius: 4px; overflow: hidden;
+      position: relative; height: 5px; margin-top: 3px;
+      background: rgba(9,9,11,.72);
+      border: 1px solid var(--line);
+      overflow: hidden;
     }
     #shFill { position: absolute; inset: 0 auto 0 0; width: 0; background: var(--blue); }
     #buffs {
-      margin-top: 4px; font-size: 11px; font-weight: 700;
-      color: var(--blue); text-shadow: 0 1px 2px #000;
+      margin-top: 5px; font-size: 11px; font-weight: 600;
+      color: var(--blue);
       min-height: 14px;
     }
 
     #kd {
-      position: absolute; top: calc(12px + var(--sa-t)); left: calc(10px + var(--sa-l));
-      margin-top: 66px;
-      font-size: 13px; font-weight: 800;
-      text-shadow: 0 1px 3px #000; color: var(--txt);
+      position: absolute; top: calc(10px + var(--sa-t)); left: calc(10px + var(--sa-l));
+      margin-top: 54px;
+      font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+      letter-spacing: .04em; color: var(--dim);
     }
 
     #killfeed {
@@ -104,61 +106,64 @@
       overflow: hidden;
     }
     .kf {
-      font-size: 12px; font-weight: 700;
-      background: rgba(0,0,0,.55);
-      border-radius: 5px; padding: 3px 8px;
+      font-size: 11px; font-weight: 600; color: #e4e4e7;
+      background: rgba(9,9,11,.78);
+      border: 1px solid var(--line-soft);
+      padding: 3px 8px;
       display: inline-block; align-self: flex-end;
       animation: kfin .18s ease-out;
-      text-shadow: 0 1px 2px #000;
     }
     @keyframes kfin { from { transform: translateX(30px); opacity: 0; } }
 
     #weapons {
       position: absolute; bottom: calc(12px + var(--sa-b)); left: 50%;
       transform: translateX(-50%);
-      display: flex; gap: 8px;
+      display: flex; gap: 6px;
       pointer-events: auto;
     }
     .wchip {
-      width: 64px; height: 46px;
-      background: rgba(16,20,28,.82);
-      border: 2px solid var(--line);
-      border-radius: 10px;
+      width: 64px; height: 44px;
+      background: rgba(9,9,11,.8);
+      border: 1px solid var(--line);
       color: var(--txt);
       font: inherit; cursor: pointer;
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       gap: 1px;
-      transition: border-color .1s, transform .1s;
+      transition: border-color .1s, background-color .1s;
     }
-    .wchip:active { transform: scale(.94); }
-    .wchip .key { font-size: 10px; color: var(--dim); font-weight: 800; }
-    .wchip .wname { font-size: 10px; font-weight: 800; letter-spacing: .02em; }
-    .wchip.sel { border-color: var(--acc); box-shadow: 0 0 10px rgba(255,213,74,.35); }
-    .wchip.locked { opacity: .28; }
+    .wchip:active { transform: scale(.97); }
+    .wchip .key { font-size: 10px; color: var(--dim); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .wchip .wname { font-size: 10px; font-weight: 700; }
+    .wchip.sel {
+      border-color: var(--acc);
+      background: rgba(255,213,74,.1);
+    }
+    .wchip.locked { opacity: .35; }
 
     #topBtns {
       position: absolute; top: calc(10px + var(--sa-t)); right: calc(12px + var(--sa-r));
       display: flex; gap: 6px; pointer-events: auto;
     }
     .pill {
-      background: rgba(16,20,28,.82);
+      background: rgba(9,9,11,.78);
       border: 1px solid var(--line);
-      color: var(--txt);
-      border-radius: 999px;
-      font: inherit; font-size: 11px; font-weight: 800;
-      padding: 7px 12px; cursor: pointer;
-      letter-spacing: .04em;
+      color: #e4e4e7;
+      font: inherit; font-size: 11px; font-weight: 600;
+      padding: 6px 10px; cursor: pointer;
+      transition: border-color .1s, color .1s;
     }
-    .pill:active { transform: scale(.95); }
+    .pill:hover { border-color: var(--dim); color: var(--txt); }
+    .pill:active { transform: scale(.97); }
     .pill.off { color: var(--dim); text-decoration: line-through; }
 
     #dead {
       position: absolute; bottom: 26%; left: 50%;
       transform: translateX(-50%);
-      background: rgba(120,20,20,.85);
-      border: 1px solid rgba(255,120,120,.6);
-      padding: 10px 18px; border-radius: 10px;
-      font-weight: 800; font-size: 15px;
+      background: rgba(9,9,11,.92);
+      border: 1px solid #b91c1c;
+      color: #fca5a5;
+      padding: 8px 16px;
+      font-weight: 700; font-size: 14px;
       text-align: center; white-space: nowrap;
     }
 
@@ -166,8 +171,8 @@
       position: fixed; top: 30%; left: 50%;
       transform: translate(-50%, -50%);
       z-index: 20; pointer-events: none;
-      font-size: clamp(16px, 3.5vw, 24px); font-weight: 900;
-      text-shadow: 0 2px 10px #000, 0 0 24px rgba(0,0,0,.8);
+      font-size: clamp(15px, 3vw, 20px); font-weight: 800;
+      text-shadow: 0 1px 4px rgba(0,0,0,.9);
       text-align: center; white-space: nowrap;
       transition: opacity .35s;
     }
@@ -179,36 +184,40 @@
       transform: translate(-50%, -50%);
       z-index: 30;
       width: min(440px, 92vw);
-      background: rgba(20,25,34,.96);
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 14px 16px;
-      box-shadow: 0 20px 60px rgba(0,0,0,.6);
+      background: var(--panel);
+      border: 1px solid var(--line-soft);
+      padding: 16px;
     }
     .board-head {
       display: flex; align-items: center; justify-content: space-between;
-      margin-bottom: 8px;
+      margin-bottom: 10px;
     }
-    .board-head b { letter-spacing: .1em; font-size: 13px; color: var(--acc); }
+    .board-head b {
+      font-size: 11px; font-weight: 700;
+      letter-spacing: .08em; text-transform: uppercase;
+      color: var(--dim);
+    }
     .board-head button {
       background: none; border: 1px solid var(--line); color: var(--dim);
-      border-radius: 6px; font: inherit; font-size: 10px; font-weight: 800;
+      font: inherit; font-size: 10px; font-weight: 600;
       padding: 4px 8px; cursor: pointer;
     }
+    .board-head button:hover { color: var(--txt); border-color: var(--dim); }
     table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th, td { padding: 6px 8px; text-align: left; }
+    th, td { padding: 7px 0; text-align: left; }
     th {
-      font-size: 10px; letter-spacing: .1em; text-transform: uppercase;
-      color: var(--dim); border-bottom: 1px solid var(--line);
+      font-size: 10px; letter-spacing: .08em; text-transform: uppercase;
+      font-weight: 600;
+      color: var(--dim);
     }
-    td { border-bottom: 1px solid rgba(255,255,255,.06); }
-    tr.me td { background: rgba(255,213,74,.12); font-weight: 800; }
+    th, td { border-bottom: 1px solid var(--line-soft); }
+    tr.me td { background: rgba(255,213,74,.07); font-weight: 600; }
     tr.out td { opacity: .45; }
 
     /* ---------- Overlays ---------- */
     .overlay {
       position: fixed; inset: 0; z-index: 40;
-      background: rgba(8,10,14,.88);
+      background: rgba(9,9,11,.93);
       display: flex; align-items: center; justify-content: center;
       padding: calc(14px + var(--sa-t)) calc(14px + var(--sa-r)) calc(14px + var(--sa-b)) calc(14px + var(--sa-l));
       overflow-y: auto;
@@ -218,77 +227,73 @@
     .panel {
       width: min(760px, 100%);
       background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: clamp(16px, 3vw, 28px);
-      box-shadow: 0 30px 80px rgba(0,0,0,.7);
+      border: 1px solid var(--line-soft);
+      padding: 28px;
       margin: auto;
     }
-    .panel.narrow { width: min(480px, 100%); }
+    .panel.narrow { width: min(360px, 100%); }
     .title {
-      font-size: clamp(30px, 7vw, 52px);
-      font-weight: 950; letter-spacing: .18em;
-      text-align: center;
-      background: linear-gradient(180deg, #fff, var(--acc));
-      -webkit-background-clip: text; background-clip: text;
-      -webkit-text-fill-color: transparent;
+      font-size: 30px;
+      font-weight: 800; letter-spacing: -.02em;
+      text-align: left;
+      color: var(--txt);
       line-height: 1.1;
     }
     .subtitle {
-      text-align: center; color: var(--dim);
-      font-size: 13px; margin-bottom: 18px; letter-spacing: .06em;
+      color: var(--dim);
+      font-size: 13px; margin-top: 4px;
     }
-    .net-line { text-align: center; font-size: 12px; margin-bottom: 12px; }
-    .net-line span { color: var(--green); font-weight: 800; }
+    .net-line {
+      font-size: 11px; margin-top: 14px;
+      color: var(--dim);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .net-line span { color: var(--green); font-weight: 600; }
     .net-line span.err { color: var(--red); }
 
     .lbl {
-      display: block; font-size: 10px; font-weight: 800;
-      letter-spacing: .12em; text-transform: uppercase;
-      color: var(--dim); margin: 12px 0 5px;
+      display: block; font-size: 11px; font-weight: 600;
+      text-transform: uppercase;
+      color: var(--dim); margin: 22px 0 6px;
     }
     .inp {
       width: 100%;
-      background: var(--panel2);
+      background: var(--bg);
       border: 1px solid var(--line);
       color: var(--txt);
-      border-radius: 9px;
       font: inherit; font-size: 15px;
       padding: 10px 12px;
+      transition: border-color .1s;
       -webkit-user-select: text; user-select: text;
     }
-    .inp:focus { outline: 2px solid var(--acc); border-color: transparent; }
+    .inp:focus { outline: none; border-color: var(--dim); }
+    .inp:focus-visible { outline: 2px solid var(--txt); outline-offset: 1px; }
 
     .btn {
-      background: var(--acc); color: #16130a;
-      border: none; border-radius: 10px;
-      font: inherit; font-weight: 900; font-size: 15px;
-      padding: 12px 18px; cursor: pointer;
-      letter-spacing: .03em;
-      transition: transform .08s, filter .1s;
+      background: var(--acc); color: #1c1917;
+      border: 1px solid transparent;
+      font: inherit; font-weight: 700; font-size: 15px;
+      padding: 11px 18px; cursor: pointer;
+      transition: filter .1s;
     }
-    .btn:hover { filter: brightness(1.08); }
-    .btn:active { transform: scale(.97); }
-    .btn:disabled { opacity: .45; cursor: default; }
+    .btn:hover { filter: brightness(1.06); }
+    .btn:active { transform: scale(.99); }
+    .btn:disabled { opacity: .4; cursor: default; }
 
-    #btnStart { width: 100%; margin-top: 14px; font-size: 17px; padding: 14px; }
-
-    .sub {
-      font-size: 11px; font-weight: 800; letter-spacing: .12em;
-      text-transform: uppercase; color: var(--acc);
-      margin: 16px 0 7px;
-    }
+    #btnStart { width: 100%; margin-top: 16px; font-size: 16px; padding: 13px; }
 
     .controls {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 4px 14px;
-      font-size: 11.5px; color: var(--dim); line-height: 1.5;
-      background: var(--panel2); border-radius: 10px; padding: 10px 12px;
+      display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px;
+      font-size: 12px; color: var(--dim); line-height: 1.5;
+      margin-top: 22px;
+      border-top: 1px solid var(--line-soft);
+      padding-top: 14px;
     }
-    .controls b { color: var(--txt); }
+    .controls b { color: var(--txt); font-weight: 600; }
     kbd {
-      background: #0e1117; border: 1px solid var(--line);
-      border-bottom-width: 2px; border-radius: 4px;
-      padding: 0 5px; font-size: 10.5px; font-family: inherit; font-weight: 800;
+      background: var(--bg); border: 1px solid var(--line);
+      border-bottom-width: 2px;
+      padding: 0 5px; font-size: 10.5px; font-family: inherit; font-weight: 600;
       color: var(--txt);
     }
 
@@ -296,7 +301,9 @@
       position: fixed; inset: 0; z-index: 99;
       background: var(--bg);
       display: flex; align-items: center; justify-content: center;
-      font-weight: 800; letter-spacing: .2em; color: var(--acc);
+      font-size: 11px; font-weight: 600;
+      letter-spacing: .16em; text-transform: uppercase;
+      color: var(--dim);
     }
     noscript { position: fixed; inset: 0; z-index: 100; background: var(--bg); display: flex; align-items: center; justify-content: center; padding: 20px; text-align: center; }
   </style>
@@ -315,7 +322,7 @@
     <div id="kd">K 0 · D 0</div>
 
     <div id="topBtns">
-      <button id="btnBoard" class="pill">Tabelle (Tab)</button>
+      <button id="btnBoard" class="pill">Tabelle</button>
       <button id="btnMute" class="pill">Ton: an</button>
     </div>
 
@@ -330,7 +337,7 @@
   <!-- Scoreboard -->
   <div id="board" class="hidden">
     <div class="board-head">
-      <b>TABELLE</b>
+      <b>Tabelle</b>
       <button id="btnBoardClose">Schliessen</button>
     </div>
     <div id="boardBody"></div>
@@ -340,29 +347,26 @@
   <div id="lobby" class="overlay">
     <div class="panel narrow">
       <div class="title">ARENA</div>
-      <div class="subtitle">2D Top-Down Multiplayer Shooter · Echtzeit über Supabase</div>
+      <div class="subtitle">2D Top-Down Multiplayer Shooter</div>
       <div class="net-line">Status: <span id="netStatus">Verbinde …</span></div>
 
-      <label class="lbl" for="nameIn">Dein Name</label>
+      <label class="lbl" for="nameIn">Name</label>
       <input id="nameIn" class="inp" maxlength="14" autocomplete="off" spellcheck="false">
 
       <button id="btnStart" class="btn">Spielen</button>
 
-      <div class="sub">Steuerung</div>
       <div class="controls">
-        <span><b>PC:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Bewegen</span>
-        <span><b>Touch:</b> linker Daumen = Bewegen</span>
-        <span><b>PC:</b> Maus = Zielen, <kbd>Leertaste</kbd>/Klick = Schiessen</span>
-        <span><b>Touch:</b> rechter Daumen = Zielen &amp; Schiessen</span>
-        <span><b>PC:</b> <kbd>1</kbd>–<kbd>2</kbd> Waffe wechseln</span>
-        <span><b>Touch:</b> aufs Ziel tippen = Schuss</span>
-        <span><b>PC:</b> <kbd>Tab</kbd> Tabelle</span>
-        <span><b>Loot:</b> Waffen &amp; Items auf der Map einsammeln</span>
+        <span><b>Bewegen:</b> <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd></span>
+        <span><b>Schiessen:</b> <kbd>Leertaste</kbd> / Klick</span>
+        <span><b>Zielen:</b> Maus</span>
+        <span><b>Waffe:</b> <kbd>1</kbd>-<kbd>2</kbd></span>
+        <span><b>Touch:</b> Sticks bewegen / zielen</span>
+        <span><b>Tab:</b> Tabelle</span>
       </div>
     </div>
   </div>
 
-  <div id="loading">LADEN …</div>
+  <div id="loading"></div>
   <noscript>Dieses Spiel benötigt JavaScript.</noscript>
 
   <script src="js/config.js"></script>
