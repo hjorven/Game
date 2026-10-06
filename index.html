@@ -18,12 +18,14 @@
   <div id="ui">
     <h1>2D Top-Down Shooter</h1>
     <p>Status: <span id="status">Verbinde...</span></p>
+    <p id="cooldown" style="color: #00ff00; margin-top: 5px;">Bereit zum Schießen</p>
   </div>
 
   <canvas id="gameCanvas"></canvas>
 
   <script>
     const statusEl = document.getElementById('status');
+    const cooldownEl = document.getElementById('cooldown');
 
     // 1. SUPABASE INITIALISIERUNG
     const SUPABASE_URL = 'https://hnuilozoehvmosgumrsc.supabase.co';
@@ -63,9 +65,16 @@
     let bullets = [];
     const moveSpeed = 4;
 
+    // Schuss Cooldown State (6 Sekunden Intervall)
+    let lastShotTime = 0;
+    const SHOT_COOLDOWN_MS = 6000;
+
+    function canShoot() {
+      return Date.now() - lastShotTime >= SHOT_COOLDOWN_MS;
+    }
+
     // Tastatur-Status (WASD)
     const keys = { w: false, a: false, s: false, d: false };
-    let canShootWithSpace = true;
 
     window.addEventListener('keydown', (e) => {
       const k = e.key.toLowerCase();
@@ -74,9 +83,8 @@
       if (k === 's' || k === 'arrowdown') keys.s = true;
       if (k === 'd' || k === 'arrowright') keys.d = true;
       if (e.code === 'Space') {
-        if (canShootWithSpace) {
+        if (canShoot()) {
           shootInFacingDirection();
-          canShootWithSpace = false;
         }
       }
     });
@@ -87,7 +95,6 @@
       if (k === 'a' || k === 'arrowleft') keys.a = false;
       if (k === 's' || k === 'arrowdown') keys.s = false;
       if (k === 'd' || k === 'arrowright') keys.d = false;
-      if (e.code === 'Space') canShootWithSpace = true;
     });
 
     // On-Screen Joystick State
@@ -102,17 +109,22 @@
     let activePointerId = null;
 
     canvas.addEventListener('pointerdown', (e) => {
-      // Rechte Bildschirmhälfte: Schießen
-      if (e.clientX > canvas.width / 2) {
-        shootAtTarget(e.clientX, e.clientY);
-      } else {
-        // Linke Bildschirmhälfte: Joystick aktivieren und X/Y speichern
+      const joystickZoneSize = 250;
+      const isBottomLeftCorner = (e.clientX < joystickZoneSize) && (e.clientY > canvas.height - joystickZoneSize);
+
+      if (isBottomLeftCorner) {
+        // Untere linke Ecke: Joystick aktivieren
         joystick.active = true;
         joystick.startX = e.clientX;
         joystick.startY = e.clientY;
         joystick.currentX = e.clientX;
         joystick.currentY = e.clientY;
         activePointerId = e.pointerId;
+      } else {
+        // Überall sonst: Schießen (falls Cooldown abgelaufen)
+        if (canShoot()) {
+          shootAtTarget(e.clientX, e.clientY);
+        }
       }
     });
 
@@ -132,7 +144,6 @@
           player.y += Math.sin(player.angle) * speedFactor;
         }
       } else if (!joystick.active) {
-        // Maus-Blickrichtung anpassen
         const dx = e.clientX - player.x;
         const dy = e.clientY - player.y;
         player.angle = Math.atan2(dy, dx);
@@ -141,7 +152,7 @@
 
     const stopJoystick = (e) => {
       if (e.pointerId === activePointerId) {
-        joystick.active = false; // Verschwindet sofort nach Loslassen
+        joystick.active = false;
         activePointerId = null;
       }
     };
@@ -160,9 +171,7 @@
         }
       })
       .on('broadcast', { event: 'shoot' }, ({ payload }) => {
-        if (payload.shooterId !== myId) {
-          bullets.push(payload);
-        }
+        bullets.push(payload);
       })
       .subscribe((status, err) => {
         statusEl.innerText = status;
@@ -199,15 +208,15 @@
     }
 
     function createAndSendBullet(angle) {
+      lastShotTime = Date.now();
       const bullet = {
         id: Math.random().toString(36).substr(2, 9),
         shooterId: myId,
         x: player.x + Math.cos(angle) * 25,
         y: player.y + Math.sin(angle) * 25,
-        vx: Math.cos(angle) * 12,
-        vy: Math.sin(angle) * 12
+        vx: Math.cos(angle) * 10,
+        vy: Math.sin(angle) * 10
       };
-      bullets.push(bullet);
 
       channel.send({
         type: 'broadcast',
@@ -243,10 +252,24 @@
 
       broadcastPosition();
 
+      // Cooldown UI Update
+      const remainingCooldown = Math.max(0, Math.ceil((SHOT_COOLDOWN_MS - (Date.now() - lastShotTime)) / 1000));
+      if (remainingCooldown > 0) {
+        cooldownEl.innerText = `Nachladen... (${remainingCooldown}s)`;
+        cooldownEl.style.color = '#ff4444';
+      } else {
+        cooldownEl.innerText = 'Bereit zum Schießen!';
+        cooldownEl.style.color = '#00ff00';
+      }
+
       // Rendering
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Bullets zeichnen
+      // Joystick-Zone (Untere linke Ecke) leicht visualisieren
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
+      ctx.fillRect(0, canvas.height - 250, 250, 250);
+
+      // Bullets zeichnen und Hit-Detection
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.x += b.vx;
@@ -254,16 +277,17 @@
 
         ctx.fillStyle = '#ffff00';
         ctx.beginPath();
-        ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
+        ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
         ctx.fill();
 
+        // Hit-Check gegen eigenen Spieler
         if (b.shooterId !== myId) {
           const dist = Math.hypot(b.x - player.x, b.y - player.y);
-          if (dist < 20) {
-            player.hp -= 10;
+          if (dist < 26) { // Treffer-Radius (Spieler-Radius 20 + Kugel-Radius 6)
+            player.hp -= 25;
             bullets.splice(i, 1);
             if (player.hp <= 0) {
-              alert('Du wurdest abgeschossen!');
+              alert('Du wurdest eliminiert!');
               player.hp = 100;
               player.x = Math.random() * (canvas.width - 100) + 50;
               player.y = Math.random() * (canvas.height - 100) + 50;
@@ -272,6 +296,7 @@
           }
         }
 
+        // Bullets außerhalb des Bildschirms löschen
         if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
           bullets.splice(i, 1);
         }
@@ -281,7 +306,7 @@
       drawPlayer(player);
       Object.values(otherPlayers).forEach(drawPlayer);
 
-      // Joystick auf Screen zeichnen (NUR WENN AKTIV)
+      // Joystick zeichnen
       if (joystick.active) {
         drawJoystick();
       }
@@ -311,34 +336,7 @@
     }
 
     function drawJoystick() {
-      // Äußerer Kreis (Basis)
       ctx.save();
       ctx.beginPath();
       ctx.arc(joystick.startX, joystick.startY, joystick.maxRadius, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-      ctx.lineWidth = 2;
-      ctx.stroke();
-
-      // Innerer Stick (Folgt der Berührung begrenzt auf den Radius)
-      const dx = joystick.currentX - joystick.startX;
-      const dy = joystick.currentY - joystick.startY;
-      const dist = Math.hypot(dx, dy);
-      const angle = Math.atan2(dy, dx);
-
-      const stickDist = Math.min(dist, joystick.maxRadius);
-      const stickX = joystick.startX + Math.cos(angle) * stickDist;
-      const stickY = joystick.startY + Math.sin(angle) * stickDist;
-
-      ctx.beginPath();
-      ctx.arc(stickX, stickY, 20, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.fill();
-      ctx.restore();
-    }
-
-    gameLoop();
-  </script>
-</body>
-</html>
