@@ -64,7 +64,7 @@
     const moveSpeed = 4;
 
     // Tastatur-Status (WASD)
-    const keys = { w: false, a: false, s: false, d: false, space: false };
+    const keys = { w: false, a: false, s: false, d: false };
     let canShootWithSpace = true;
 
     window.addEventListener('keydown', (e) => {
@@ -90,52 +90,65 @@
       if (e.code === 'Space') canShootWithSpace = true;
     });
 
-    // Touch / Pointer Steuerung
-    let touchStartPos = null;
+    // On-Screen Joystick State
+    let joystick = {
+      active: false,
+      startX: 0,
+      startY: 0,
+      currentX: 0,
+      currentY: 0,
+      maxRadius: 50
+    };
     let activePointerId = null;
 
     canvas.addEventListener('pointerdown', (e) => {
-      // Rechte Bildschirmhälfte: Schießen in Richtung des Klicks
+      // Rechte Bildschirmhälfte: Schießen
       if (e.clientX > canvas.width / 2) {
         shootAtTarget(e.clientX, e.clientY);
       } else {
-        // Linke Bildschirmhälfte: Virtueller Joystick
-        touchStartPos = { x: e.clientX, y: e.clientY };
+        // Linke Bildschirmhälfte: Joystick aktivieren und X/Y speichern
+        joystick.active = true;
+        joystick.startX = e.clientX;
+        joystick.startY = e.clientY;
+        joystick.currentX = e.clientX;
+        joystick.currentY = e.clientY;
         activePointerId = e.pointerId;
       }
     });
 
     canvas.addEventListener('pointermove', (e) => {
-      if (touchStartPos && e.pointerId === activePointerId) {
-        const dx = e.clientX - touchStartPos.x;
-        const dy = e.clientY - touchStartPos.y;
+      if (joystick.active && e.pointerId === activePointerId) {
+        joystick.currentX = e.clientX;
+        joystick.currentY = e.clientY;
+
+        const dx = joystick.currentX - joystick.startX;
+        const dy = joystick.currentY - joystick.startY;
         const dist = Math.hypot(dx, dy);
 
         if (dist > 5) {
           player.angle = Math.atan2(dy, dx);
-          // Sanfte Bewegung basierend auf Joystick-Auslenkung
-          const speedFactor = Math.min(dist / 40, 1) * moveSpeed;
+          const speedFactor = Math.min(dist / joystick.maxRadius, 1) * moveSpeed;
           player.x += Math.cos(player.angle) * speedFactor;
           player.y += Math.sin(player.angle) * speedFactor;
         }
-      } else if (!touchStartPos) {
-        // Maus-Blickrichtung anpassen, wenn nicht gesteuert wird
+      } else if (!joystick.active) {
+        // Maus-Blickrichtung anpassen
         const dx = e.clientX - player.x;
         const dy = e.clientY - player.y;
         player.angle = Math.atan2(dy, dx);
       }
     });
 
-    const stopTouch = (e) => {
+    const stopJoystick = (e) => {
       if (e.pointerId === activePointerId) {
-        touchStartPos = null;
+        joystick.active = false; // Verschwindet sofort nach Loslassen
         activePointerId = null;
       }
     };
-    canvas.addEventListener('pointerup', stopTouch);
-    canvas.addEventListener('pointercancel', stopTouch);
+    canvas.addEventListener('pointerup', stopJoystick);
+    canvas.addEventListener('pointercancel', stopJoystick);
 
-    // 3. SUPABASE REALTIME CHANNEL & NETWORK THROTTLING
+    // 3. SUPABASE REALTIME
     const channel = sb.channel('arena_room_1', {
       config: { broadcast: { self: true } }
     });
@@ -158,12 +171,10 @@
           statusEl.innerText = 'Verbunden! ID: ' + myId;
         } else if (status === 'CHANNEL_ERROR') {
           statusEl.style.color = 'red';
-          statusEl.innerText = 'CHANNEL_ERROR: Verbindung fehlgeschlagen';
-          console.error('Channel Error:', err);
+          statusEl.innerText = 'CHANNEL_ERROR';
         }
       });
 
-    // Rate-Limiting für Netzwerk-Sync (alle 50ms max. 20 Pakete/s)
     let lastBroadcastTime = 0;
     function broadcastPosition() {
       const now = Date.now();
@@ -177,7 +188,6 @@
       }
     }
 
-    // Schussfunktionen
     function shootAtTarget(targetX, targetY) {
       const angle = Math.atan2(targetY - player.y, targetX - player.x);
       player.angle = angle;
@@ -208,7 +218,7 @@
 
     // 4. GAME LOOP
     function gameLoop() {
-      // WASD Bewegung verarbeiten
+      // WASD Bewegung
       let moveX = 0;
       let moveY = 0;
 
@@ -222,23 +232,21 @@
         player.x += (moveX / len) * moveSpeed;
         player.y += (moveY / len) * moveSpeed;
         
-        // Winkel an Bewegung ausrichten, falls kein Touch aktiv
-        if (!touchStartPos) {
+        if (!joystick.active) {
           player.angle = Math.atan2(moveY, moveX);
         }
       }
 
-      // Grenzen einhalten
+      // Spielfeldbegrenzung
       player.x = Math.max(20, Math.min(canvas.width - 20, player.x));
       player.y = Math.max(20, Math.min(canvas.height - 20, player.y));
 
-      // Position kontinuierlich senden
       broadcastPosition();
 
       // Rendering
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Bullets aktualisieren und zeichnen
+      // Bullets zeichnen
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.x += b.vx;
@@ -249,7 +257,6 @@
         ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
         ctx.fill();
 
-        // Kollision prüfen
         if (b.shooterId !== myId) {
           const dist = Math.hypot(b.x - player.x, b.y - player.y);
           if (dist < 20) {
@@ -265,7 +272,6 @@
           }
         }
 
-        // Bullets außerhalb des Bildschirms löschen
         if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
           bullets.splice(i, 1);
         }
@@ -275,6 +281,11 @@
       drawPlayer(player);
       Object.values(otherPlayers).forEach(drawPlayer);
 
+      // Joystick auf Screen zeichnen (NUR WENN AKTIV)
+      if (joystick.active) {
+        drawJoystick();
+      }
+
       requestAnimationFrame(gameLoop);
     }
 
@@ -283,23 +294,48 @@
       ctx.translate(p.x, p.y);
       ctx.rotate(p.angle);
 
-      // Körper
       ctx.fillStyle = p.color;
       ctx.beginPath();
       ctx.arc(0, 0, 20, 0, Math.PI * 2);
       ctx.fill();
 
-      // Kanonenrohr
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, -4, 25, 8);
 
       ctx.restore();
 
-      // HP-Balken
       ctx.fillStyle = 'red';
       ctx.fillRect(p.x - 20, p.y - 30, 40, 5);
       ctx.fillStyle = 'green';
       ctx.fillRect(p.x - 20, p.y - 30, (p.hp / 100) * 40, 5);
+    }
+
+    function drawJoystick() {
+      // Äußerer Kreis (Basis)
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(joystick.startX, joystick.startY, joystick.maxRadius, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      // Innerer Stick (Folgt der Berührung begrenzt auf den Radius)
+      const dx = joystick.currentX - joystick.startX;
+      const dy = joystick.currentY - joystick.startY;
+      const dist = Math.hypot(dx, dy);
+      const angle = Math.atan2(dy, dx);
+
+      const stickDist = Math.min(dist, joystick.maxRadius);
+      const stickX = joystick.startX + Math.cos(angle) * stickDist;
+      const stickY = joystick.startY + Math.sin(angle) * stickDist;
+
+      ctx.beginPath();
+      ctx.arc(stickX, stickY, 20, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.fill();
+      ctx.restore();
     }
 
     gameLoop();
