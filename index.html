@@ -4,13 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>2D Top-Down Shooter</title>
-  <!-- Supabase JS Library (UMD) -->
+  <!-- Supabase JS Library (UMD Bundle für globale window.supabase Variable) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; touch-action: none; }
     body { background: #1a1a1a; color: white; font-family: sans-serif; overflow: hidden; }
     canvas { display: block; background: #222; }
     #ui { position: absolute; top: 10px; left: 10px; z-index: 10; pointer-events: none; }
+    #status { font-weight: bold; color: #ffcc00; }
   </style>
 </head>
 <body>
@@ -23,9 +24,18 @@
   <canvas id="gameCanvas"></canvas>
 
   <script>
-    // 1. SUPABASE INITIALISIERUNG
+    const statusEl = document.getElementById('status');
+
+    // 1. SUPABASE PROFIL & INITIALISIERUNG
     const SUPABASE_URL = 'https://msvj0STldeNel5buD3csmA.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_msvj0STldeNel5buD3csmA__RwIbNTU';
+
+    if (!window.supabase) {
+      statusEl.innerText = 'Fehler: Supabase SDK nicht geladen!';
+      statusEl.style.color = 'red';
+      throw new Error('Supabase SDK missing');
+    }
+
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
     // 2. CANVAS SETUP
@@ -34,7 +44,7 @@
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
 
-    // Local Player State
+    // Player State
     const myId = 'player_' + Math.random().toString(36).substr(2, 9);
     let player = {
       id: myId,
@@ -48,7 +58,7 @@
     let otherPlayers = {};
     let bullets = [];
 
-    // 3. TOUCH & PENCIL STEUERUNG (iPad / Mobile)
+    // 3. TOUCH / STEUERUNG
     let touchStartPos = null;
     
     canvas.addEventListener('pointerdown', (e) => {
@@ -72,7 +82,7 @@
 
     canvas.addEventListener('pointerup', () => { touchStartPos = null; });
 
-    // 4. SUPABASE REALTIME SYNC
+    // 4. SUPABASE REALTIME SYNC MIT ERROR-HANDLING
     const channel = sb.channel('arena_room_1');
 
     channel
@@ -86,10 +96,20 @@
           bullets.push(payload);
         }
       })
-      .subscribe((status) => {
+      .subscribe((status, err) => {
+        statusEl.innerText = status;
+        
         if (status === 'SUBSCRIBED') {
-          document.getElementById('status').innerText = 'Bereit! ID: ' + myId;
+          statusEl.style.color = '#00ff00';
+          statusEl.innerText = 'Verbunden! ID: ' + myId;
           broadcastPosition();
+        } else if (status === 'CHANNEL_ERROR') {
+          statusEl.style.color = 'red';
+          statusEl.innerText = 'CHANNEL_ERROR: Prüfe Realtime im Supabase Dashboard';
+          console.error('Channel error details:', err);
+        } else if (status === 'TIMED_OUT') {
+          statusEl.style.color = 'orange';
+          statusEl.innerText = 'TIMED_OUT: Verbindungssignal verloren';
         }
       });
 
@@ -120,11 +140,10 @@
       });
     }
 
-    // 5. GAME LOOP & RENDERING
+    // 5. GAME LOOP
     function gameLoop() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Kugel-Update
       bullets.forEach((b, i) => {
         b.x += b.vx;
         b.y += b.vy;
@@ -133,7 +152,6 @@
         ctx.arc(b.x, b.y, 4, 0, Math.PI * 2);
         ctx.fill();
 
-        // Kollision mit lokalem Spieler
         if (b.shooterId !== myId) {
           const dist = Math.hypot(b.x - player.x, b.y - player.y);
           if (dist < 20) {
@@ -149,10 +167,7 @@
         }
       });
 
-      // Eigenen Spieler zeichnen
       drawPlayer(player);
-
-      // Andere Spieler zeichnen
       Object.values(otherPlayers).forEach(drawPlayer);
 
       requestAnimationFrame(gameLoop);
@@ -163,19 +178,16 @@
       ctx.translate(p.x, p.y);
       ctx.rotate(p.angle);
 
-      // Körper
       ctx.fillStyle = p.color;
       ctx.beginPath();
       ctx.arc(0, 0, 20, 0, Math.PI * 2);
       ctx.fill();
 
-      // Kanone
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, -4, 25, 8);
 
       ctx.restore();
 
-      // HP-Balken
       ctx.fillStyle = 'red';
       ctx.fillRect(p.x - 20, p.y - 30, 40, 5);
       ctx.fillStyle = 'green';
