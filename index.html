@@ -26,9 +26,13 @@
   <script>
     const statusEl = document.getElementById('status');
 
+    // 1. SUPABASE PROFIL & INITIALISIERUNG// Correct Project Setup from your Screenshot
+<script>
+    const statusEl = document.getElementById('status');
+
     // 1. SUPABASE PROFIL & INITIALISIERUNG
-    const SUPABASE_URL = 'https://msvj0STldeNel5buD3csmA.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_msvj0STldeNel5buD3csmA__RwIbNTU';
+    const SUPABASE_URL = 'https://hnuilozoehvmosgumrsc.supabase.co';
+    const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhudWlsb3pvZWh2bW9zZ3VtcnNjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEyNzY3NTEsImV4cCI6MjEwNjg1Mjc1MX0.ztp_BEa420xSujbBCWLz1QHLOL4YDHE-jWQmP8ucTBo';
 
     if (!window.supabase) {
       statusEl.innerText = 'Fehler: Supabase SDK nicht geladen!';
@@ -37,6 +41,9 @@
     }
 
     const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // 2. CANVAS SETUP
+    // ... restlicher Code bleibt genau so wie bei dir!
 
     // 2. CANVAS SETUP
     const canvas = document.getElementById('gameCanvas');
