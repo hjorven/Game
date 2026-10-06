@@ -18,14 +18,12 @@
   <div id="ui">
     <h1>2D Top-Down Shooter</h1>
     <p>Status: <span id="status">Verbinde...</span></p>
-    <p id="cooldown" style="color: #00ff00; margin-top: 5px;">Bereit zum Schießen</p>
   </div>
 
   <canvas id="gameCanvas"></canvas>
 
   <script>
     const statusEl = document.getElementById('status');
-    const cooldownEl = document.getElementById('cooldown');
 
     // 1. SUPABASE INITIALISIERUNG
     const SUPABASE_URL = 'https://hnuilozoehvmosgumrsc.supabase.co';
@@ -50,7 +48,8 @@
     resizeCanvas();
     window.addEventListener('resize', resizeCanvas);
 
-    // Player State
+    // Player State (Mehr Leben für ~6s TTK)
+    const MAX_HP = 300;
     const myId = 'player_' + Math.random().toString(36).substr(2, 9);
     let player = {
       id: myId,
@@ -58,23 +57,22 @@
       y: Math.random() * (canvas.height - 100) + 50,
       angle: 0,
       color: '#' + Math.floor(Math.random() * 16777215).toString(16),
-      hp: 100
+      hp: MAX_HP
     };
 
     let otherPlayers = {};
     let bullets = [];
     const moveSpeed = 4;
 
-    // Schuss Cooldown State (6 Sekunden Intervall)
+    // Schuss-Einstellungen (Schnelles Feuer)
+    const FIRE_INTERVAL_MS = 150; // Alle 150ms 1 Schuss
+    const DAMAGE_PER_HIT = 7;     // ~43 Schüsse nötig = 6.4 Sekunden Dauerfeuer
     let lastShotTime = 0;
-    const SHOT_COOLDOWN_MS = 6000;
+    let isShooting = false;
+    let aimTarget = { x: 0, y: 0 };
 
-    function canShoot() {
-      return Date.now() - lastShotTime >= SHOT_COOLDOWN_MS;
-    }
-
-    // Tastatur-Status (WASD)
-    const keys = { w: false, a: false, s: false, d: false };
+    // Tastatur-Status (WASD & Space)
+    const keys = { w: false, a: false, s: false, d: false, space: false };
 
     window.addEventListener('keydown', (e) => {
       const k = e.key.toLowerCase();
@@ -82,11 +80,7 @@
       if (k === 'a' || k === 'arrowleft') keys.a = true;
       if (k === 's' || k === 'arrowdown') keys.s = true;
       if (k === 'd' || k === 'arrowright') keys.d = true;
-      if (e.code === 'Space') {
-        if (canShoot()) {
-          shootInFacingDirection();
-        }
-      }
+      if (e.code === 'Space') keys.space = true;
     });
 
     window.addEventListener('keyup', (e) => {
@@ -95,9 +89,10 @@
       if (k === 'a' || k === 'arrowleft') keys.a = false;
       if (k === 's' || k === 'arrowdown') keys.s = false;
       if (k === 'd' || k === 'arrowright') keys.d = false;
+      if (e.code === 'Space') keys.space = false;
     });
 
-    // On-Screen Joystick State
+    // Joystick & Touch State
     let joystick = {
       active: false,
       startX: 0,
@@ -107,12 +102,13 @@
       maxRadius: 50
     };
     let activePointerId = null;
+    let shootingPointerId = null;
 
     canvas.addEventListener('pointerdown', (e) => {
       const joystickZoneSize = 250;
-      const isBottomLeftCorner = (e.clientX < joystickZoneSize) && (e.clientY > canvas.height - joystickZoneSize);
+      const isBottomLeft = (e.clientX < joystickZoneSize) && (e.clientY > canvas.height - joystickZoneSize);
 
-      if (isBottomLeftCorner) {
+      if (isBottomLeft) {
         joystick.active = true;
         joystick.startX = e.clientX;
         joystick.startY = e.clientY;
@@ -120,9 +116,9 @@
         joystick.currentY = e.clientY;
         activePointerId = e.pointerId;
       } else {
-        if (canShoot()) {
-          shootAtTarget(e.clientX, e.clientY);
-        }
+        isShooting = true;
+        shootingPointerId = e.pointerId;
+        aimTarget = { x: e.clientX, y: e.clientY };
       }
     });
 
@@ -141,6 +137,8 @@
           player.x += Math.cos(player.angle) * speedFactor;
           player.y += Math.sin(player.angle) * speedFactor;
         }
+      } else if (isShooting && e.pointerId === shootingPointerId) {
+        aimTarget = { x: e.clientX, y: e.clientY };
       } else if (!joystick.active) {
         const dx = e.clientX - player.x;
         const dy = e.clientY - player.y;
@@ -148,16 +146,20 @@
       }
     });
 
-    const stopJoystick = (e) => {
+    const stopInput = (e) => {
       if (e.pointerId === activePointerId) {
         joystick.active = false;
         activePointerId = null;
       }
+      if (e.pointerId === shootingPointerId) {
+        isShooting = false;
+        shootingPointerId = null;
+      }
     };
-    canvas.addEventListener('pointerup', stopJoystick);
-    canvas.addEventListener('pointercancel', stopJoystick);
+    canvas.addEventListener('pointerup', stopInput);
+    canvas.addEventListener('pointercancel', stopInput);
 
-    // 3. SUPABASE REALTIME (Saubere Registrierung)
+    // 3. SUPABASE REALTIME
     const channel = sb.channel('arena_room_1', {
       config: { broadcast: { ack: false, self: false } }
     });
@@ -197,25 +199,27 @@
       }
     }
 
-    function shootAtTarget(targetX, targetY) {
-      const angle = Math.atan2(targetY - player.y, targetX - player.x);
-      player.angle = angle;
-      createAndSendBullet(angle);
-    }
+    function tryShooting() {
+      const now = Date.now();
+      if (now - lastShotTime < FIRE_INTERVAL_MS) return;
 
-    function shootInFacingDirection() {
-      createAndSendBullet(player.angle);
-    }
+      let angle = player.angle;
+      if (isShooting) {
+        angle = Math.atan2(aimTarget.y - player.y, aimTarget.x - player.x);
+        player.angle = angle;
+      } else if (!keys.space) {
+        return; // Kein Schuss-Befehl aktiv
+      }
 
-    function createAndSendBullet(angle) {
-      lastShotTime = Date.now();
+      lastShotTime = now;
+
       const bullet = {
         id: Math.random().toString(36).substr(2, 9),
         shooterId: myId,
         x: player.x + Math.cos(angle) * 25,
         y: player.y + Math.sin(angle) * 25,
-        vx: Math.cos(angle) * 10,
-        vy: Math.sin(angle) * 10
+        vx: Math.cos(angle) * 12,
+        vy: Math.sin(angle) * 12
       };
 
       bullets.push(bullet);
@@ -243,7 +247,7 @@
         player.x += (moveX / len) * moveSpeed;
         player.y += (moveY / len) * moveSpeed;
         
-        if (!joystick.active) {
+        if (!joystick.active && !isShooting) {
           player.angle = Math.atan2(moveY, moveX);
         }
       }
@@ -252,17 +256,10 @@
       player.x = Math.max(20, Math.min(canvas.width - 20, player.x));
       player.y = Math.max(20, Math.min(canvas.height - 20, player.y));
 
-      broadcastPosition();
+      // Continuous Shooting verarbeiten
+      tryShooting();
 
-      // Cooldown UI Update
-      const remainingCooldown = Math.max(0, Math.ceil((SHOT_COOLDOWN_MS - (Date.now() - lastShotTime)) / 1000));
-      if (remainingCooldown > 0) {
-        cooldownEl.innerText = `Nachladen... (${remainingCooldown}s)`;
-        cooldownEl.style.color = '#ff4444';
-      } else {
-        cooldownEl.innerText = 'Bereit zum Schießen!';
-        cooldownEl.style.color = '#00ff00';
-      }
+      broadcastPosition();
 
       // Rendering
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -279,18 +276,18 @@
 
         ctx.fillStyle = '#ffff00';
         ctx.beginPath();
-        ctx.arc(b.x, b.y, 6, 0, Math.PI * 2);
+        ctx.arc(b.x, b.y, 5, 0, Math.PI * 2);
         ctx.fill();
 
         // Hit-Check gegen eigenen Spieler
         if (b.shooterId !== myId) {
           const dist = Math.hypot(b.x - player.x, b.y - player.y);
-          if (dist < 26) {
-            player.hp -= 25;
+          if (dist < 25) {
+            player.hp -= DAMAGE_PER_HIT;
             bullets.splice(i, 1);
             if (player.hp <= 0) {
               alert('Du wurdest eliminiert!');
-              player.hp = 100;
+              player.hp = MAX_HP;
               player.x = Math.random() * (canvas.width - 100) + 50;
               player.y = Math.random() * (canvas.height - 100) + 50;
             }
@@ -330,10 +327,12 @@
 
       ctx.restore();
 
+      // Healthbar
+      const barWidth = 40;
       ctx.fillStyle = 'red';
-      ctx.fillRect(p.x - 20, p.y - 30, 40, 5);
-      ctx.fillStyle = 'green';
-      ctx.fillRect(p.x - 20, p.y - 30, (p.hp / 100) * 40, 5);
+      ctx.fillRect(p.x - barWidth/2, p.y - 30, barWidth, 5);
+      ctx.fillStyle = '#00ff00';
+      ctx.fillRect(p.x - barWidth/2, p.y - 30, Math.max(0, (p.hp / MAX_HP) * barWidth), 5);
     }
 
     function drawJoystick() {
