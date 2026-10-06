@@ -113,7 +113,6 @@
       const isBottomLeftCorner = (e.clientX < joystickZoneSize) && (e.clientY > canvas.height - joystickZoneSize);
 
       if (isBottomLeftCorner) {
-        // Untere linke Ecke: Joystick aktivieren
         joystick.active = true;
         joystick.startX = e.clientX;
         joystick.startY = e.clientY;
@@ -121,7 +120,6 @@
         joystick.currentY = e.clientY;
         activePointerId = e.pointerId;
       } else {
-        // Überall sonst: Schießen (falls Cooldown abgelaufen)
         if (canShoot()) {
           shootAtTarget(e.clientX, e.clientY);
         }
@@ -159,28 +157,30 @@
     canvas.addEventListener('pointerup', stopJoystick);
     canvas.addEventListener('pointercancel', stopJoystick);
 
-    // 3. SUPABASE REALTIME
+    // 3. SUPABASE REALTIME (Saubere Registrierung)
     const channel = sb.channel('arena_room_1', {
-      config: { broadcast: { self: true } }
+      config: { broadcast: { ack: false, self: false } }
     });
 
     channel
-      .on('broadcast', { event: 'player-move' }, ({ payload }) => {
-        if (payload.id !== myId) {
-          otherPlayers[payload.id] = payload;
+      .on('broadcast', { event: 'player-move' }, (data) => {
+        if (data.payload && data.payload.id !== myId) {
+          otherPlayers[data.payload.id] = data.payload;
         }
       })
-      .on('broadcast', { event: 'shoot' }, ({ payload }) => {
-        bullets.push(payload);
+      .on('broadcast', { event: 'shoot' }, (data) => {
+        if (data.payload) {
+          bullets.push(data.payload);
+        }
       })
       .subscribe((status, err) => {
         statusEl.innerText = status;
         if (status === 'SUBSCRIBED') {
           statusEl.style.color = '#00ff00';
           statusEl.innerText = 'Verbunden! ID: ' + myId;
-        } else if (status === 'CHANNEL_ERROR') {
-          statusEl.style.color = 'red';
-          statusEl.innerText = 'CHANNEL_ERROR';
+        } else {
+          statusEl.style.color = '#ffaa00';
+          if (err) console.error('Subscribe Error:', err);
         }
       });
 
@@ -217,6 +217,8 @@
         vx: Math.cos(angle) * 10,
         vy: Math.sin(angle) * 10
       };
+
+      bullets.push(bullet);
 
       channel.send({
         type: 'broadcast',
@@ -265,11 +267,11 @@
       // Rendering
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Joystick-Zone (Untere linke Ecke) leicht visualisieren
+      // Joystick-Zone anzeigen
       ctx.fillStyle = 'rgba(255, 255, 255, 0.03)';
       ctx.fillRect(0, canvas.height - 250, 250, 250);
 
-      // Bullets zeichnen und Hit-Detection
+      // Bullets verarbeiten
       for (let i = bullets.length - 1; i >= 0; i--) {
         const b = bullets[i];
         b.x += b.vx;
@@ -283,7 +285,7 @@
         // Hit-Check gegen eigenen Spieler
         if (b.shooterId !== myId) {
           const dist = Math.hypot(b.x - player.x, b.y - player.y);
-          if (dist < 26) { // Treffer-Radius (Spieler-Radius 20 + Kugel-Radius 6)
+          if (dist < 26) {
             player.hp -= 25;
             bullets.splice(i, 1);
             if (player.hp <= 0) {
@@ -296,7 +298,6 @@
           }
         }
 
-        // Bullets außerhalb des Bildschirms löschen
         if (b.x < 0 || b.x > canvas.width || b.y < 0 || b.y > canvas.height) {
           bullets.splice(i, 1);
         }
@@ -340,3 +341,28 @@
       ctx.beginPath();
       ctx.arc(joystick.startX, joystick.startY, joystick.maxRadius, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      const dx = joystick.currentX - joystick.startX;
+      const dy = joystick.currentY - joystick.startY;
+      const dist = Math.hypot(dx, dy);
+      const angle = Math.atan2(dy, dx);
+
+      const stickDist = Math.min(dist, joystick.maxRadius);
+      const stickX = joystick.startX + Math.cos(angle) * stickDist;
+      const stickY = joystick.startY + Math.sin(angle) * stickDist;
+
+      ctx.beginPath();
+      ctx.arc(stickX, stickY, 20, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+      ctx.fill();
+      ctx.restore();
+    }
+
+    gameLoop();
+  </script>
+</body>
+</html>
