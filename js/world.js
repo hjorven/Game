@@ -134,4 +134,33 @@ const World = (() => {
   function inWall(x, y) {
     const list = chunks.get(key(Math.floor(x / CHUNK), Math.floor(y / CHUNK)));
     if (!list) return false;
-    for (const wl of list) if (x >= wl.x &&
+    for (const wl of list) if (x >= wl.x && x <= wl.x + wl.w && y >= wl.y && y <= wl.y + wl.h) return true;
+    return false;
+  }
+
+  // Wände im 3x3-Umfeld (Hindernisse bleiben in ihrem Chunk, Rand = MARGIN > CFG.R)
+  function nearWalls(x, y) {
+    const cx = Math.floor(x / CHUNK), cy = Math.floor(y / CHUNK);
+    const out = [];
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const list = chunks.get(key(cx + dx, cy + dy));
+        if (list) for (const wl of list) out.push(wl);
+      }
+    }
+    return out;
+  }
+
+  ensureGen();
+
+  return {
+    get w() { return size; },
+    get h() { return size; },
+    get target() { return target; },
+    get walls() { return walls; },
+    get spawns() { return spawns; },
+    get puSlots() { return puSlots; },
+    setTarget, update, inWall, nearWalls,
+    chunkKey: key, CHUNK,
+  };
+})();
