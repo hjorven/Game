@@ -1,21 +1,21 @@
-// js/world.js — Deterministische Welt aus Seed: Chunks, Hindernisse, Spawns, Pickups
+// js/world.js — Deterministische Welt mit garantierten Korridoren (kein Einsperren möglich)
 'use strict';
 
 const World = (() => {
   const SEED = 0x5eeda11;
   const CHUNK = 400;      // Chunk-Größe (px)
-  const MARGIN = 30;      // Abstand Hindernis → Chunk-Rand (> CFG.R)
+  const MARGIN = 75;      // Freier Rand pro Chunk -> garantiert 150px breite Wege zwischen allen Chunks!
   const EDGE = 120;       // Spawn-Sicherheitsabstand zur Weltkante
   const SPAWN_STEP = 200; // Raster für Spawn-Punkte
   const GROW_S = 1.6;     // Zeitkonstante für Größen-Animation (s)
 
   const chunks = new Map();  // "cx,cy" -> [AABB]
-  const walls = [];          // flache Liste (nur additiv, nie umsortiert)
+  const walls = [];          // flache Liste aller Hindernisse
   const spawns = [];
   const puSlots = [];
-  let size = worldSize(1);   // aktuelle (animierte) Seitenlänge, quadratisch
+  let size = worldSize(1);   // aktuelle Seitenlänge
   let target = size;
-  let genSide = 0;           // erzeugte Chunk-Rasterseite
+  let genSide = 0;
 
   function mulberry32(a) {
     return function () {
@@ -26,7 +26,6 @@ const World = (() => {
     };
   }
 
-  // Gleicher Seed für alle Clients → identische Welt
   function hash2(cx, cy) {
     let hs = SEED >>> 0;
     hs = Math.imul(hs ^ (cx + 0x9e37), 0x85ebca6b) >>> 0;
@@ -40,24 +39,43 @@ const World = (() => {
     const rnd = mulberry32(hash2(cx, cy));
     const list = [];
     const roll = rnd();
-    const count = roll < 0.28 ? 0 : roll < 0.78 ? 1 : 2;
+    // 0 bis 2 Hindernisse pro Chunk
+    const count = roll < 0.35 ? 0 : roll < 0.80 ? 1 : 2;
     const x0 = cx * CHUNK, y0 = cy * CHUNK;
+
     for (let i = 0; i < count; i++) {
       const t = rnd();
       let bw, bh;
-      if (t < 0.4) { bw = 70 + Math.floor(rnd() * 41); bh = bw; }                                    // Kiste
-      else if (t < 0.7) { bw = 170 + Math.floor(rnd() * 131); bh = 36 + Math.floor(rnd() * 9); }     // Balken
-      else { bw = 36 + Math.floor(rnd() * 9); bh = 170 + Math.floor(rnd() * 131); }                   // Säule
+      if (t < 0.4) { bw = 50 + Math.floor(rnd() * 30); bh = bw; }                                    // Kiste
+      else if (t < 0.7) { bw = 120 + Math.floor(rnd() * 80); bh = 30 + Math.floor(rnd() * 10); }      // Balken
+      else { bw = 30 + Math.floor(rnd() * 10); bh = 120 + Math.floor(rnd() * 80); }                   // Säule
+
       const maxX = CHUNK - 2 * MARGIN - bw;
       const maxY = CHUNK - 2 * MARGIN - bh;
       if (maxX <= 0 || maxY <= 0) continue;
+
       const wall = {
         x: x0 + MARGIN + Math.floor(rnd() * (maxX + 1)),
         y: y0 + MARGIN + Math.floor(rnd() * (maxY + 1)),
         w: bw, h: bh,
       };
-      list.push(wall);
-      walls.push(wall);
+
+      // Prüfen, ob Hindernisse im selben Chunk sich nicht gegenseitig blockieren
+      let overlap = false;
+      for (const existing of list) {
+        if (wall.x < existing.x + existing.w + 40 &&
+            wall.x + wall.w + 40 > existing.x &&
+            wall.y < existing.y + existing.h + 40 &&
+            wall.y + wall.h + 40 > existing.y) {
+          overlap = true;
+          break;
+        }
+      }
+
+      if (!overlap) {
+        list.push(wall);
+        walls.push(wall);
+      }
     }
     chunks.set(key, list);
   }
@@ -72,28 +90,14 @@ const World = (() => {
     return true;
   }
 
-  // Fester Loot-Typ pro Slot-Index (gewichtet, deterministisch) – stabil über die Laufzeit
-  function slotTypeFor(i) {
-    const rnd = mulberry32(hash2(i + 1, 0x7107));
-    const r = rnd() * 100;
-    let acc = 0;
-    for (const [type, w] of PU_WEIGHTS) {
-      acc += w;
-      if (r < acc) return type;
-    }
-    return 'health';
-  }
-
-  // Spawn- und Pickup-Plätze aus dem Hindernis-Raster (deterministisch)
   function rebuildDerived() {
     spawns.length = 0;
     for (let x = EDGE; x <= size - EDGE; x += SPAWN_STEP) {
       for (let y = EDGE; y <= size - EDGE; y += SPAWN_STEP) {
-        if (spotFree(x, y, 70)) spawns.push({ x, y });
+        if (spotFree(x, y, 60)) spawns.push({ x, y });
       }
     }
     puSlots.length = 0;
-    // Mehr Slots auf der Karte generieren (10 bis 20 Slots):
     const want = clamp(Math.round(size * size / 200000), 10, 20);
     if (spawns.length) {
       for (let i = 0; i < want; i++) {
@@ -104,7 +108,6 @@ const World = (() => {
     }
   }
 
-  // Neue Chunks außen dazu generieren – bestehende bleiben unverändert
   function ensureGen() {
     const side = Math.ceil(size / CHUNK);
     if (side === genSide) return;
@@ -115,12 +118,10 @@ const World = (() => {
     rebuildDerived();
   }
 
-  // Zielgröße aus Presence-Spielerzahl
   function setTarget(players) {
     target = worldSize(players);
   }
 
-  // Weiche Größen-Animation + Chunk-Nachschub
   function update(dt) {
     if (size === target) return;
     const k = Math.min(1, dt / GROW_S * 3);
@@ -138,7 +139,6 @@ const World = (() => {
     return false;
   }
 
-  // Wände im 3x3-Umfeld (Hindernisse bleiben in ihrem Chunk, Rand = MARGIN > CFG.R)
   function nearWalls(x, y) {
     const cx = Math.floor(x / CHUNK), cy = Math.floor(y / CHUNK);
     const out = [];
