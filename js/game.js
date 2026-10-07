@@ -374,7 +374,12 @@ function collectPowerup(p) {
   sparkAt(p.x, p.y, info.color, 12);
   p.respawns++;
   p.hiddenUntil = S.now + puRespawnMs(p.type);
-  Net.send('pickup', { slot: p.slot, r: p.respawns, t: p.hiddenUntil });
+
+  // Nächsten Waffentyp/Item für diesen Slot neu würfeln:
+  const nextType = getRandomPUType();
+  p.type = nextType;
+
+  Net.send('pickup', { slot: p.slot, r: p.respawns, t: p.hiddenUntil, nextType });
   S.me.dirty = true;
   Sfx.play('pickup');
   UI.setNotice(info.label + ' eingesammelt!', 1300);
@@ -650,6 +655,7 @@ function onPickup(p) {
   if (p.r <= pu.respawns && p.t <= pu.hiddenUntil) return;
   pu.respawns = p.r;
   pu.hiddenUntil = p.t;
+  if (p.nextType) pu.type = p.nextType; // Typ mit anderen Spielern synchronisieren
   sparkAt(pu.x, pu.y, PU_INFO[pu.type].color, 10);
 }
 
