@@ -145,7 +145,7 @@ function tryFire(now) {
   };
   Net.send('shoot', evt);
   spawnBullets(evt);
-  S.shake = Math.min(12, S.shake + (me.weapon === 'sniper' || me.weapon === 'rocket' ? 4 : 1.5));
+  S.shake = Math.min(12, S.shake + (me.weapon === 'sniper' || me.weapon === 'rocket' || me.weapon === 'magnum' ? 4 : me.weapon === 'grenade' ? 3 : 1.5));
   Sfx.play('shot', { weapon: me.weapon });
 }
 
@@ -204,7 +204,7 @@ function updateBullets(dt) {
     b.y += b.vy * dt;
     b.life -= dt;
 
-    if (b.w === 'rocket' && Math.random() < 0.75) {
+    if (b.splash && Math.random() < 0.75) {
       addP({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 30, vy: -20 - Math.random() * 30, life: 0.4, maxLife: 0.4, color: 'rgba(180,180,180,0.8)', size: 4 + Math.random() * 3 });
     }
 
