@@ -68,6 +68,9 @@ const Sfx = {
       case 'shot':
         if (opts && opts.weapon === 'shotgun') { this.noise(0.14, 0.07, 1400); this.tone(160, 0.08, 'square', 0.03, 70); }
         else if (opts && opts.weapon === 'sniper') { this.tone(700, 0.12, 'sawtooth', 0.05, 180); this.noise(0.08, 0.05, 3000); }
+        else if (opts && opts.weapon === 'smg') { this.tone(520, 0.04, 'square', 0.03, 300); }
+        else if (opts && opts.weapon === 'magnum') { this.noise(0.1, 0.06, 1800); this.tone(260, 0.1, 'sawtooth', 0.05, 90); }
+        else if (opts && opts.weapon === 'grenade') { this.tone(180, 0.15, 'square', 0.05, 90); this.noise(0.1, 0.04, 700); }
         else if (opts && opts.weapon === 'rocket') { this.noise(0.25, 0.06, 900); this.tone(120, 0.2, 'sawtooth', 0.04, 60); }
         else this.tone(420, 0.07, 'square', 0.04, 210);
         break;
