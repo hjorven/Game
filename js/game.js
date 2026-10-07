@@ -137,9 +137,24 @@ function tryFire(now) {
   me.muzzle = 0.07;
   const bx = me.x + Math.cos(me.angle) * (CFG.R + 10);
   const by = me.y + Math.sin(me.angle) * (CFG.R + 10);
+
+  let tx = null, ty = null;
+  if (W.isArc) {
+    const aim = Input.aimInfo();
+    let targetDist = W.maxRange || 350;
+    if ((aim.source === 'mouse' || aim.source === 'tap') && aim.screen) {
+      const wPos = Render.screenToWorld(aim.screen.x, aim.screen.y);
+      const d = dist(me.x, me.y, wPos.x, wPos.y);
+      targetDist = Math.min(d, W.maxRange || 350);
+    }
+    tx = r1(bx + Math.cos(me.angle) * targetDist);
+    ty = r1(by + Math.sin(me.angle) * targetDist);
+  }
+
   const evt = {
     id: MY_ID + '-' + now.toString(36) + Math.random().toString(36).slice(2, 6),
     o: MY_ID, w: me.weapon, x: r1(bx), y: r1(by), a: r2(me.angle),
+    tx, ty
   };
   Net.send('shoot', evt);
   spawnBullets(evt);
@@ -155,12 +170,23 @@ function spawnBullets(evt) {
     if (n > 1) off = (i / (n - 1) - 0.5) * W.spread + (Math.random() - 0.5) * W.spread * 0.3;
     else if (W.spread) off = (Math.random() - 0.5) * W.spread;
     const a = evt.a + off;
-    S.bullets.push({
+
+    const b = {
       eid: evt.id, id: evt.id + '_' + i, o: evt.o, w: evt.w,
       x: evt.x, y: evt.y, px: evt.x, py: evt.y,
       vx: Math.cos(a) * W.spd, vy: Math.sin(a) * W.spd,
       life: W.life, dmg: W.dmg, size: W.size, color: W.color, splash: W.splash || 0,
-    });
+    };
+
+    if (W.isArc && evt.tx != null && evt.ty != null) {
+      b.isArc = true;
+      b.sx = evt.x; b.sy = evt.y;
+      b.tx = evt.tx; b.ty = evt.ty;
+      b.totalDist = dist(evt.x, evt.y, evt.tx, evt.ty);
+      b.travelled = 0;
+    }
+
+    S.bullets.push(b);
   }
 }
 
@@ -198,31 +224,52 @@ function updateBullets(dt) {
   for (let i = S.bullets.length - 1; i >= 0; i--) {
     const b = S.bullets[i];
     b.px = b.x; b.py = b.y;
-    b.x += b.vx * dt;
-    b.y += b.vy * dt;
-    b.life -= dt;
 
-    if (b.splash && Math.random() < 0.75) {
-      addP({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 30, vy: -20 - Math.random() * 30, life: 0.4, maxLife: 0.4, color: 'rgba(180,180,180,0.8)', size: 4 + Math.random() * 3 });
-    }
+    if (b.isArc) {
+      const step = Math.sqrt(b.vx * b.vx + b.vy * b.vy) * dt;
+      b.travelled += step;
+      const t = Math.min(1, b.travelled / (b.totalDist || 1));
+      b.x = b.sx + (b.tx - b.sx) * t;
+      b.y = b.sy + (b.ty - b.sy) * t;
+      b.z = Math.sin(t * Math.PI) * 55; // Bogenhöhe in Pixeln
 
-    const wall = pointInWall(b.x, b.y);
-    const out = b.x < 0 || b.x > World.w || b.y < 0 || b.y > World.h;
-    const hitMe = b.o !== MY_ID && me.alive && S.state === 'playing' &&
-      segCircle(b.px, b.py, b.x, b.y, me.x, me.y, CFG.R + b.size * 0.5);
-    const expired = b.life <= 0;
-
-    if (wall || out || hitMe || expired) {
-      if (b.splash && !S.seenExplosions.has(b.eid)) {
-        const ex = clamp(b.x, 2, World.w - 2), ey = clamp(b.y, 2, World.h - 2);
-        triggerExplode(b, ex, ey);
-      } else if (hitMe) {
-        damageMe(b.dmg, b.o);
-        sparkAt(b.x, b.y, '#ff8a80', 8);
-      } else if (wall) {
-        sparkAt(b.x, b.y, b.color, 5);
+      if (Math.random() < 0.4) {
+        addP({ x: b.x, y: b.y - b.z, vx: (Math.random() - 0.5) * 15, vy: (Math.random() - 0.5) * 15, life: 0.25, maxLife: 0.25, color: 'rgba(200,200,200,0.6)', size: 3 });
       }
-      S.bullets.splice(i, 1);
+
+      if (t >= 1) {
+        if (!S.seenExplosions.has(b.eid)) {
+          triggerExplode(b, b.tx, b.ty);
+        }
+        S.bullets.splice(i, 1);
+      }
+    } else {
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+      b.life -= dt;
+
+      if (b.splash && Math.random() < 0.75) {
+        addP({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 30, vy: -20 - Math.random() * 30, life: 0.4, maxLife: 0.4, color: 'rgba(180,180,180,0.8)', size: 4 + Math.random() * 3 });
+      }
+
+      const wall = pointInWall(b.x, b.y);
+      const out = b.x < 0 || b.x > World.w || b.y < 0 || b.y > World.h;
+      const hitMe = b.o !== MY_ID && me.alive && S.state === 'playing' &&
+        segCircle(b.px, b.py, b.x, b.y, me.x, me.y, CFG.R + b.size * 0.5);
+      const expired = b.life <= 0;
+
+      if (wall || out || hitMe || expired) {
+        if (b.splash && !S.seenExplosions.has(b.eid)) {
+          const ex = clamp(b.x, 2, World.w - 2), ey = clamp(b.y, 2, World.h - 2);
+          triggerExplode(b, ex, ey);
+        } else if (hitMe) {
+          damageMe(b.dmg, b.o);
+          sparkAt(b.x, b.y, '#ff8a80', 8);
+        } else if (wall) {
+          sparkAt(b.x, b.y, b.color, 5);
+        }
+        S.bullets.splice(i, 1);
+      }
     }
   }
 }
