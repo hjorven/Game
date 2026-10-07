@@ -1,275 +1,213 @@
-// js/ui.js — DOM-Overlay: Startbildschirm, HUD, Killfeed, Tabelle
-'use strict';
-
 const UI = {
   els: {},
-  _noticeTimer: null,
   _acc: 0,
   _accBoard: 0,
+  _noticeTimer: null,
+  _deadShown: false,
 
   init() {
-    const $ = (id) => document.getElementById(id);
     this.els = {
-      hud: $('hud'), hpFill: $('hpFill'), hpText: $('hpText'),
-      shWrap: $('shWrap'), shFill: $('shFill'), buffs: $('buffs'),
-      kd: $('kd'),
-      weapons: $('weapons'), dead: $('dead'), killfeed: $('killfeed'), notice: $('notice'),
-      btnBoard: $('btnBoard'), btnMute: $('btnMute'),
-      board: $('board'), boardBody: $('boardBody'), btnBoardClose: $('btnBoardClose'),
-      lobby: $('lobby'), nameIn: $('nameIn'), btnStart: $('btnStart'),
-      netStatus: $('netStatus'),
-      loading: $('loading'),
+      hud: document.getElementById('hud'),
+      hpFill: document.getElementById('hpFill'),
+      hpText: document.getElementById('hpText'),
+      shWrap: document.getElementById('shWrap'),
+      shFill: document.getElementById('shFill'),
+      buffs: document.getElementById('buffs'),
+      kd: document.getElementById('kd'),
+      weapons: document.getElementById('weapons'),
+      killfeed: document.getElementById('killfeed'),
+      dead: document.getElementById('dead'),
+      notice: document.getElementById('notice'),
+      board: document.getElementById('board'),
+      boardBody: document.getElementById('boardBody'),
+      btnBoard: document.getElementById('btnBoard'),
+      btnBoardClose: document.getElementById('btnBoardClose'),
+      btnMute: document.getElementById('btnMute'),
+      lobby: document.getElementById('lobby'),
+      netStatus: document.getElementById('netStatus'),
+      nameIn: document.getElementById('nameIn'),
+      btnStart: document.getElementById('btnStart')
     };
-    const e = this.els;
 
-    // Name
-    e.nameIn.value = S.me.name;
-    e.nameIn.maxLength = CFG.NAME_MAX;
-    e.nameIn.addEventListener('change', () => Game.setName(e.nameIn.value));
-    e.nameIn.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') e.nameIn.blur(); });
-
-    // Start
-    e.btnStart.addEventListener('click', () => Game.startGame());
-
-    // Waffen-Chips (dynamisch aus den 2 Slots)
-    // pointerdown statt click: funktioniert auch, wenn gleichzeitig beide Sticks gehalten werden,
-    // und ueberlebt das Neuaufbauen der Chips (Container bleibt bestehen).
-    e.weapons.addEventListener('pointerdown', (ev) => {
-      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
-      const chip = ev.target.closest('.wchip');
-      if (!chip || !chip.dataset.w) return;
-      ev.preventDefault();
-      Game.setWeapon(chip.dataset.w);
-    });
-    // Tastatur-Aktivierung (Enter/Leertaste auf fokussiertem Chip) weiterhin erlauben
-    e.weapons.addEventListener('click', (ev) => {
-      if (ev.detail !== 0) return; // echte Maus-/Touch-Klicks wurden schon per pointerdown behandelt
-      const chip = ev.target.closest('.wchip');
-      if (chip && chip.dataset.w) Game.setWeapon(chip.dataset.w);
+    // Event Listener
+    this.els.btnStart.addEventListener('click', () => {
+      const name = this.els.nameIn.value.trim() || 'Spieler';
+      Game.start(name);
     });
 
-    // Buttons
-    e.btnBoard.addEventListener('click', () => this.toggleBoard());
-    e.btnBoardClose.addEventListener('click', () => this.toggleBoard());
-    e.btnMute.addEventListener('click', () => this.toggleMute());
+    this.els.nameIn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        const name = this.els.nameIn.value.trim() || 'Spieler';
+        Game.start(name);
+      }
+    });
 
-    e.btnMute.textContent = Sfx.enabled ? 'Ton: an' : 'Ton: aus';
-    e.btnMute.classList.toggle('off', !Sfx.enabled);
+    this.els.btnBoard.addEventListener('click', () => this.toggleBoard());
+    this.els.btnBoardClose.addEventListener('click', () => this.toggleBoard());
+    this.els.btnMute.addEventListener('click', () => this.toggleMute());
 
-    this.enterStart();
-    if (e.loading) e.loading.remove();
+    // Nickname aus LocalStorage laden
+    const savedName = localStorage.getItem('arena_nick');
+    if (savedName) this.els.nameIn.value = savedName;
   },
 
-  // ---------- Status ----------
-
-  setNetStatus(text, isErr) {
-    const el = this.els.netStatus;
-    if (!el) return;
-    el.textContent = 'Server: ' + text;
-    el.classList.toggle('err', !!isErr);
+  setNetStatus(text, isErr = false) {
+    if (!this.els.netStatus) return;
+    this.els.netStatus.textContent = text;
+    this.els.netStatus.className = isErr ? 'err' : '';
   },
 
-  syncWeaponChips() {
+  renderWeapons() {
     const e = this.els;
     if (!e.weapons) return;
+    e.weapons.innerHTML = '';
     const me = S.me;
-    const sig = me.slots.join(',') + '|' + me.weapon + '|' + me.alive +
-      '|' + me.slots.map((w) => (w && WEAPONS[w].ammoMax ? me.ammo[w] | 0 : 0)).join(',') +
-      '|' + (me.reloadUntil > S.now ? 'R' : '');
-    if (e.weapons.dataset.sig === sig) return;
-    e.weapons.dataset.sig = sig;
-    e.weapons.textContent = '';
-    me.slots.forEach((w, i) => {
+    if (!me) return;
+
+    Object.keys(WEAPONS).forEach((wKey, idx) => {
+      const w = WEAPONS[wKey];
       const btn = document.createElement('button');
       btn.className = 'wchip';
-      btn.dataset.slot = String(i + 1);
-      const key = document.createElement('span');
-      key.className = 'key';
-      key.textContent = String(i + 1);
-      const nm = document.createElement('span');
-      nm.className = 'wname';
-      if (w) {
-        btn.dataset.w = w;
-        const W = WEAPONS[w];
-        nm.textContent = W.short;
-        if (W.ammoMax) {
-          const am = document.createElement('span');
-          am.className = 'ammo';
-          if (me.reloadUntil > S.now && me.weapon === w) am.textContent = 'R';
-          else am.textContent = (me.ammo[w] | 0);
-          btn.appendChild(am);
-          if (me.reloadUntil > S.now && me.weapon === w) {
-            const bar = document.createElement('span');
-            bar.className = 'rbar';
-            btn.appendChild(bar);
-            btn.classList.add('reloading');
-          }
-        }
-        btn.classList.toggle('sel', me.weapon === w && me.alive);
-        btn.disabled = !me.alive;
-      } else {
-        nm.textContent = '–';
+      
+      const isSel = me.weapon === wKey;
+      if (isSel) btn.classList.add('sel');
+      if (!me.weaponsOwned || !me.weaponsOwned.includes(wKey)) {
         btn.classList.add('locked');
-        btn.disabled = true;
       }
-      btn.append(key, nm);
+
+      const ammoText = me.ammo && me.ammo[wKey] !== undefined ? me.ammo[wKey] : w.ammoMax;
+
+      btn.innerHTML = `
+        <span class="key">${idx + 1}</span>
+        <span class="wname">${w.short || w.name}</span>
+        <span class="ammo">${ammoText}</span>
+      `;
+
+      btn.addEventListener('click', () => {
+        if (me.alive) Game.selectWeapon(wKey);
+      });
+
       e.weapons.appendChild(btn);
     });
-  },
-
-  // Reload-Fortschritt (jeden Frame) + Fertig-Blitz
-  reloadTick() {
-    const e = this.els;
-    const me = S.me;
-    if (!me.reloadUntil || me.reloadUntil <= S.now) return;
-    const W = WEAPONS[me.weapon];
-    if (!W.ammoMax) return;
-    const chip = e.weapons.querySelector('.wchip[data-w="' + me.weapon + '"]');
-    if (!chip) return;
-    const am = chip.querySelector('.ammo');
-    if (am) am.textContent = 'R';
-    const bar = chip.querySelector('.rbar');
-    if (!bar) return;
-    const frac = clamp(1 - (me.reloadUntil - S.now) / W.reloadMs, 0, 1);
-    bar.style.width = (frac * 100) + '%';
-  },
-
-  reloadDone() {
-    const chip = this.els.weapons.querySelector('.wchip.sel');
-    if (chip) {
-      chip.classList.add('flashing');
-      setTimeout(() => chip.classList.remove('flashing'), 650);
-    }
-    const am = this.els.weapons.querySelector('.wchip.sel .ammo');
-    if (am) am.textContent = (S.me.ammo[S.me.weapon] | 0);
-  },
-
-  // ---------- Zustandswechsel ----------
-
-  enterGame() {
-    this.els.lobby.classList.add('hidden');
-    this.els.hud.classList.remove('hidden');
-    if (S.boardOpen) this.toggleBoard();
-    this.syncWeaponChips();
   },
 
   enterStart() {
     this.els.lobby.classList.remove('hidden');
     this.els.hud.classList.add('hidden');
-    if (S.boardOpen) this.toggleBoard();
-    this.els.nameIn.value = S.me.name;
+    this.els.dead.classList.add('hidden');
+    this.els.board.classList.add('hidden');
   },
 
-  // ---------- HUD ----------
-
-  addKillfeed(o) {
-    const kf = this.els.killfeed;
-    if (!kf) return;
-    const mk = (text, color) => {
-      const s = document.createElement('span');
-      s.textContent = text;
-      if (color) s.style.color = color;
-      return s;
-    };
-    const div = document.createElement('div');
-    div.className = 'kf';
-    if (o.self) { div.append(mk(o.v, o.vc), mk(' – Selbstschuss')); }
-    else { div.append(mk(o.k, o.kc), mk('  ›  '), mk(o.v, o.vc)); }
-    kf.prepend(div);
-    while (kf.children.length > 6) kf.lastChild.remove();
-    setTimeout(() => div.remove(), CFG.KILLFEED_MS);
-  },
-
-  setNotice(text, ms) {
-    const el = this.els.notice;
-    if (!el) return;
-    clearTimeout(this._noticeTimer);
-    el.textContent = text;
-    el.classList.remove('hide');
-    this._noticeTimer = setTimeout(() => el.classList.add('hide'), ms || 2000);
+  enterGame() {
+    this.els.lobby.classList.add('hidden');
+    this.els.hud.classList.remove('hidden');
+    this.els.dead.classList.add('hidden');
+    this.els.board.classList.add('hidden');
+    this.renderWeapons();
   },
 
   toggleBoard() {
     S.boardOpen = !S.boardOpen;
     this.els.board.classList.toggle('hidden', !S.boardOpen);
-    if (S.boardOpen) this.renderStandings();
-    Sfx.play('ui');
+    if (S.boardOpen) this.updateBoard();
   },
 
   toggleMute() {
-    const on = Sfx.toggle();
-    this.els.btnMute.textContent = on ? 'Ton: an' : 'Ton: aus';
-    this.els.btnMute.classList.toggle('off', !on);
+    const isOn = AudioSys.toggle();
+    this.els.btnMute.textContent = isOn ? 'Ton: an' : 'Ton: aus';
+    this.els.btnMute.classList.toggle('off', !isOn);
   },
 
-  renderStandings() {
-    const st = Game.standings();
-    const e = this.els;
-    e.boardBody.textContent = '';
-    const tbl = document.createElement('table');
-    tbl.innerHTML = '<thead><tr><th>#</th><th>Spieler</th><th>Kills</th><th>Deaths</th></tr></thead>';
-    const tbody = document.createElement('tbody');
-    st.rows.forEach((r, i) => {
-      const tr = document.createElement('tr');
-      if (r.isMe) tr.className = 'me';
-      const cells = [String(i + 1), r.name, String(r.kills | 0), String(r.deaths | 0)];
-      cells.forEach((t) => { const td = document.createElement('td'); td.textContent = t; tr.appendChild(td); });
-      if (!r.alive) tr.classList.add('out');
-      tbody.appendChild(tr);
-    });
-    tbl.appendChild(tbody);
-    e.boardBody.appendChild(tbl);
+  setNotice(text, ms = 2000) {
+    const el = this.els.notice;
+    el.textContent = text;
+    el.classList.remove('hide');
+    clearTimeout(this._noticeTimer);
+    this._noticeTimer = setTimeout(() => {
+      el.classList.add('hide');
+    }, ms);
   },
 
-  // ---------- Frame-Update ----------
+  addKillfeed(info) {
+    const kf = this.els.killfeed;
+    const item = document.createElement('div');
+    item.className = 'kf';
+    if (info.self) {
+      item.innerHTML = `<span style="color:${info.vc}">${info.v}</span> ist gestorben`;
+    } else {
+      item.innerHTML = `<span style="color:${info.kc}">${info.k}</span> ☠ <span style="color:${info.vc}">${info.v}</span>`;
+    }
+    kf.appendChild(item);
+    setTimeout(() => {
+      item.style.opacity = '0';
+      item.style.transition = 'opacity 0.3s';
+      setTimeout(() => item.remove(), 300);
+    }, CFG.KILLFEED_MS || 4000);
+
+    while (kf.children.length > 5) {
+      kf.firstChild.remove();
+    }
+  },
+
+  updateBoard() {
+    const data = Game.standings();
+    let html = '<table><thead><tr><th>Spieler</th><th>Kills</th><th>Tode</th></tr></thead><tbody>';
+    for (const r of data.rows) {
+      const cls = [];
+      if (r.isMe) cls.push('me');
+      if (!r.alive) cls.push('out');
+      const classAttr = cls.length ? ` class="${cls.join(' ')}"` : '';
+      const deadMark = r.alive ? '' : ' ☠';
+
+      html += `<tr${classAttr}><td>${r.name}${deadMark}</td><td>${r.kills}</td><td>${r.deaths}</td></tr>`;
+    }
+    html += '</tbody></table>';
+    this.els.boardBody.innerHTML = html;
+  },
 
   update(dt) {
-    const e = this.els;
+    if (S.state !== 'playing') return;
     const me = S.me;
-    if (!e.hud) return;
+    if (!me) return;
 
-    this.reloadTick();
-
-    const hp = clamp(me.hp, 0, CFG.MAX_HP);
-    e.hpFill.style.width = (hp / CFG.MAX_HP * 100) + '%';
-    e.hpText.textContent = Math.ceil(hp);
-    const shOn = me.shield > 0 && S.now < me.shieldUntil;
-    e.shWrap.classList.toggle('hidden', !shOn);
-    if (shOn) e.shFill.style.width = (me.shield / CFG.MAX_SHIELD * 100) + '%';
-
-    // toaktive Infos (gedrosselt)
     this._acc += dt;
-    if (this._acc >= 0.2) {
+    if (this._acc > 0.08) {
       this._acc = 0;
-      this._tick();
+
+      // HP-Leiste
+      const hpPct = Math.max(0, Math.min(100, (me.hp / CFG.MAX_HP) * 100));
+      this.els.hpFill.style.width = hpPct + '%';
+      this.els.hpText.textContent = Math.max(0, Math.round(me.hp));
+
+      // Schild-Leiste
+      const shPct = Math.max(0, Math.min(100, (me.shield / CFG.MAX_SHIELD) * 100));
+      this.els.shWrap.classList.toggle('hidden', shPct <= 0);
+      this.els.shFill.style.width = shPct + '%';
+
+      // Respawn- / Toten-Anzeige
+      if (!me.alive && !this._deadShown) {
+        this.els.dead.classList.remove('hidden');
+        this._deadShown = true;
+      } else if (me.alive && this._deadShown) {
+        this.els.dead.classList.add('hidden');
+        this._deadShown = false;
+      }
+
+      if (!me.alive) {
+        const left = Math.max(0, Math.ceil((me.deadUntil - S.now) / 1000));
+        this.els.dead.innerHTML = `ELIMINIERT — Respawn in ${left}s`;
+      }
+
+      // K/D Anzeige
+      this.els.kd.textContent = `K ${me.kills} · D ${me.deaths}`;
     }
 
-    // Board live aktualisieren
     if (S.boardOpen) {
       this._accBoard += dt;
-      if (this._accBoard >= 0.5) { this._accBoard = 0; this.renderStandings(); }
+      if (this._accBoard > 0.8) {
+        this._accBoard = 0;
+        this.updateBoard();
+      }
     }
-  },
-
-  _tick() {
-    const e = this.els;
-    const me = S.me;
-
-    e.kd.textContent = 'K ' + me.kills + ' · D ' + me.deaths;
-
-    // Buffs
-    const buffs = [];
-    if (me.shield > 0 && S.now < me.shieldUntil) buffs.push('Schild ' + Math.ceil((me.shieldUntil - S.now) / 1000) + 's');
-    const b = buffs.join(' · ');
-    if (e.buffs.textContent !== b) e.buffs.textContent = b;
-
-    // Tot-Banner
-    if (S.state === 'playing' && !me.alive) {
-      const left = Math.max(0, (me.deadUntil - S.now) / 1000);
-      e.dead.classList.remove('hidden');
-      e.dead.textContent = 'Eliminiert – Spawn in ' + left.toFixed(1) + 's';
-    } else if (!e.dead.classList.contains('hidden')) {
-      e.dead.classList.add('hidden');
-    }
-  },
+  }
 };
