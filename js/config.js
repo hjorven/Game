@@ -34,7 +34,7 @@ const WEAPONS = {
   sniper:  { key: 'sniper',  name: 'Sniper',         short: 'SNIP', slot: 3, dmg: 50, spd: 1700, rate: 1100, spread: 0.006, pel: 1, size: 5,   life: 1.4,  color: '#7fdcff', ammoMax: 12, reloadMs: 1900 },
   smg:     { key: 'smg',     name: 'Maschinenpistole', short: 'SMG', slot: 5, dmg: 8,  spd: 950,  rate: 85,   spread: 0.10,  pel: 1, size: 3,   life: 0.8,  color: '#b388ff', ammoMax: 45, reloadMs: 1500 },
   magnum:  { key: 'magnum',  name: 'Magnum',         short: 'MAG',  slot: 6, dmg: 36, spd: 1200, rate: 560,  spread: 0.015, pel: 1, size: 5,   life: 1.0,  color: '#ff80ab', ammoMax: 6,  reloadMs: 1700 },
-  grenade: { key: 'grenade', name: 'Granatwerfer',   short: 'GRN',  slot: 7, dmg: 45, spd: 420,  rate: 900,  spread: 0,     pel: 1, size: 6,   life: 1.1,  color: '#9ccc65', splash: 90, ammoMax: 8, reloadMs: 2000 },
+  grenade: { key: 'grenade', name: 'Granatwerfer',   short: 'GRN',  slot: 7, dmg: 45, spd: 460,  rate: 900,  spread: 0,     pel: 1, size: 6,   life: 1.2,  color: '#9ccc65', splash: 90, ammoMax: 8, reloadMs: 2000, isArc: true, maxRange: 380 },
   rocket:  { key: 'rocket',  name: 'Raketenwerfer',  short: 'RAK',  slot: 4, dmg: 60, spd: 540,  rate: 1500, spread: 0,     pel: 1, size: 7,   life: 2.2,  color: '#ff5a5a', splash: 120, ammoMax: 6, reloadMs: 2300 },
 };
 
