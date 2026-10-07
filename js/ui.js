@@ -1,3 +1,6 @@
+// js/ui.js — DOM-Overlay: Startbildschirm, HUD, Killfeed, Tabelle
+'use strict';
+
 const UI = {
   els: {},
   _acc: 0,
@@ -26,19 +29,18 @@ const UI = {
       lobby: document.getElementById('lobby'),
       netStatus: document.getElementById('netStatus'),
       nameIn: document.getElementById('nameIn'),
-      btnStart: document.getElementById('btnStart')
+      btnStart: document.getElementById('btnStart'),
+      loading: document.getElementById('loading')
     };
 
     // Event Listener
     this.els.btnStart.addEventListener('click', () => {
-      const name = this.els.nameIn.value.trim() || 'Spieler';
-      Game.start(name);
+      Game.startGame();
     });
 
     this.els.nameIn.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
-        const name = this.els.nameIn.value.trim() || 'Spieler';
-        Game.start(name);
+        Game.startGame();
       }
     });
 
@@ -46,9 +48,12 @@ const UI = {
     this.els.btnBoardClose.addEventListener('click', () => this.toggleBoard());
     this.els.btnMute.addEventListener('click', () => this.toggleMute());
 
-    // Nickname aus LocalStorage laden
-    const savedName = localStorage.getItem('arena_nick');
-    if (savedName) this.els.nameIn.value = savedName;
+    // Nickname
+    if (S.me && S.me.name) this.els.nameIn.value = S.me.name;
+
+    // Startansicht anzeigen & Ladebildschirm entfernen
+    this.enterStart();
+    if (this.els.loading) this.els.loading.remove();
   },
 
   setNetStatus(text, isErr = false) {
@@ -57,38 +62,64 @@ const UI = {
     this.els.netStatus.className = isErr ? 'err' : '';
   },
 
-  renderWeapons() {
+  syncWeaponChips() {
     const e = this.els;
     if (!e.weapons) return;
-    e.weapons.innerHTML = '';
     const me = S.me;
     if (!me) return;
 
-    Object.keys(WEAPONS).forEach((wKey, idx) => {
-      const w = WEAPONS[wKey];
+    e.weapons.textContent = '';
+    me.slots.forEach((w, i) => {
       const btn = document.createElement('button');
       btn.className = 'wchip';
       
-      const isSel = me.weapon === wKey;
-      if (isSel) btn.classList.add('sel');
-      if (!me.weaponsOwned || !me.weaponsOwned.includes(wKey)) {
+      const key = document.createElement('span');
+      key.className = 'key';
+      key.textContent = String(i + 1);
+
+      const nm = document.createElement('span');
+      nm.className = 'wname';
+
+      if (w && WEAPONS[w]) {
+        btn.dataset.w = w;
+        const W = WEAPONS[w];
+        nm.textContent = W.short || W.name;
+
+        if (W.ammoMax) {
+          const am = document.createElement('span');
+          am.className = 'ammo';
+          if (me.reloadUntil > S.now && me.weapon === w) {
+            am.textContent = 'R';
+            const bar = document.createElement('span');
+            bar.className = 'rbar';
+            btn.appendChild(bar);
+            btn.classList.add('reloading');
+          } else {
+            am.textContent = (me.ammo[w] | 0);
+          }
+          btn.appendChild(am);
+        }
+
+        btn.classList.toggle('sel', me.weapon === w && me.alive);
+        btn.disabled = !me.alive;
+        btn.addEventListener('click', () => Game.setWeapon(w));
+      } else {
+        nm.textContent = '–';
         btn.classList.add('locked');
+        btn.disabled = true;
       }
 
-      const ammoText = me.ammo && me.ammo[wKey] !== undefined ? me.ammo[wKey] : w.ammoMax;
-
-      btn.innerHTML = `
-        <span class="key">${idx + 1}</span>
-        <span class="wname">${w.short || w.name}</span>
-        <span class="ammo">${ammoText}</span>
-      `;
-
-      btn.addEventListener('click', () => {
-        if (me.alive) Game.selectWeapon(wKey);
-      });
-
+      btn.append(key, nm);
       e.weapons.appendChild(btn);
     });
+  },
+
+  reloadDone() {
+    const chip = this.els.weapons.querySelector('.wchip.sel');
+    if (chip) {
+      chip.classList.add('flashing');
+      setTimeout(() => chip.classList.remove('flashing'), 650);
+    }
   },
 
   enterStart() {
@@ -103,7 +134,7 @@ const UI = {
     this.els.hud.classList.remove('hidden');
     this.els.dead.classList.add('hidden');
     this.els.board.classList.add('hidden');
-    this.renderWeapons();
+    this.syncWeaponChips();
   },
 
   toggleBoard() {
@@ -113,13 +144,14 @@ const UI = {
   },
 
   toggleMute() {
-    const isOn = AudioSys.toggle();
+    const isOn = Sfx.toggle();
     this.els.btnMute.textContent = isOn ? 'Ton: an' : 'Ton: aus';
     this.els.btnMute.classList.toggle('off', !isOn);
   },
 
   setNotice(text, ms = 2000) {
     const el = this.els.notice;
+    if (!el) return;
     el.textContent = text;
     el.classList.remove('hide');
     clearTimeout(this._noticeTimer);
@@ -130,6 +162,7 @@ const UI = {
 
   addKillfeed(info) {
     const kf = this.els.killfeed;
+    if (!kf) return;
     const item = document.createElement('div');
     item.className = 'kf';
     if (info.self) {
