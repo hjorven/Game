@@ -85,7 +85,7 @@ const World = (() => {
   }
 
   // Spawn- und Pickup-Plätze aus dem Hindernis-Raster (deterministisch)
- function rebuildDerived() {
+  function rebuildDerived() {
     spawns.length = 0;
     for (let x = EDGE; x <= size - EDGE; x += SPAWN_STEP) {
       for (let y = EDGE; y <= size - EDGE; y += SPAWN_STEP) {
@@ -93,7 +93,7 @@ const World = (() => {
       }
     }
     puSlots.length = 0;
-    // Mehr Slots auf der Karte generieren (z. B. 10 bis 20 statt 6 bis 16):
+    // Mehr Slots auf der Karte generieren (10 bis 20 Slots):
     const want = clamp(Math.round(size * size / 200000), 10, 20);
     if (spawns.length) {
       for (let i = 0; i < want; i++) {
