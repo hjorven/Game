@@ -32,7 +32,18 @@ const UI = {
     e.btnStart.addEventListener('click', () => Game.startGame());
 
     // Waffen-Chips (dynamisch aus den 2 Slots)
+    // pointerdown statt click: funktioniert auch, wenn gleichzeitig beide Sticks gehalten werden,
+    // und ueberlebt das Neuaufbauen der Chips (Container bleibt bestehen).
+    e.weapons.addEventListener('pointerdown', (ev) => {
+      if (ev.pointerType === 'mouse' && ev.button !== 0) return;
+      const chip = ev.target.closest('.wchip');
+      if (!chip || !chip.dataset.w) return;
+      ev.preventDefault();
+      Game.setWeapon(chip.dataset.w);
+    });
+    // Tastatur-Aktivierung (Enter/Leertaste auf fokussiertem Chip) weiterhin erlauben
     e.weapons.addEventListener('click', (ev) => {
+      if (ev.detail !== 0) return; // echte Maus-/Touch-Klicks wurden schon per pointerdown behandelt
       const chip = ev.target.closest('.wchip');
       if (chip && chip.dataset.w) Game.setWeapon(chip.dataset.w);
     });
