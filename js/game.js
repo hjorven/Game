@@ -118,14 +118,12 @@ function tryFire(now) {
   const me = S.me;
   if (S.state !== 'playing' || !me.alive) return;
   const W = WEAPONS[me.weapon];
-  if (me.reloadUntil > now) return; // lädt gerade nach
+  if (me.reloadUntil > now) return;
   if (now - me.lastShot < W.rate) return;
   if (W.ammoMax) {
     if ((me.ammo[W.key] || 0) <= 0) {
-      // Magazin leer → automatisch nachladen
       me.reloadUntil = now + W.reloadMs;
       me.reloadW = W.key;
-      me.reloadAmmoBefore = 0;
       me.dirty = true;
       UI.syncWeaponChips();
       Sfx.play('reload');
@@ -263,7 +261,6 @@ function die(killerId) {
   me.shield = 0; me.shieldUntil = 0;
   me.reloadUntil = 0; me.reloadW = null;
   me.dirty = true;
-  // Waffe droppt am Todestort (Pistole bleibt, Zusatzwaffe geht an den Boden)
   const dropW = me.weapon !== 'pistol' ? me.weapon : me.slots.find((w) => w && w !== 'pistol');
   if (dropW) {
     const d = { id: MY_ID + '-' + me.deaths, w: dropW, x: r1(me.x), y: r1(me.y) };
@@ -337,7 +334,6 @@ function updatePowerups() {
       break;
     }
   }
-  // Waffen-Drops aufheben
   for (let i = S.drops.length - 1; i >= 0; i--) {
     const d = S.drops[i];
     if (dist2(me.x, me.y, d.x, d.y) < (CFG.R + 20) * (CFG.R + 20)) {
@@ -354,8 +350,6 @@ function updatePowerups() {
   }
 }
 
-// Pickup-Liste an die (skalierende) Welt angleichen: Positionen & Typen folgen World.puSlots,
-// neue Slots kommen dazu, Respawn-Zustände bestehender Slots bleiben erhalten.
 function syncPickupSlots() {
   const slots = World.puSlots;
   if (S.powerups.length === slots.length && S._puSig === slots.length + ':' + slots[0].x) return;
@@ -375,7 +369,6 @@ function collectPowerup(p) {
   p.respawns++;
   p.hiddenUntil = S.now + puRespawnMs(p.type);
 
-  // Nächsten Waffentyp/Item für diesen Slot neu würfeln:
   const nextType = getRandomPUType();
   p.type = nextType;
 
@@ -397,8 +390,6 @@ function applyPickup(type) {
   }
 }
 
-// Waffe in die 2 Slots einordnen: freien Slot füllen, sonst aktuelle ersetzen.
-// Gibt true zurück, wenn die Waffe neu aufgenommen wurde.
 function giveWeapon(w) {
   const me = S.me;
   if (!WEAPONS[w]) return false;
@@ -415,7 +406,7 @@ function giveWeapon(w) {
   return true;
 }
 
-// ---------------- Sync (Pickup-/Drop-Stand für Spät-Azmeister) ----------------
+// ---------------- Sync ----------------
 
 function syncPayload() {
   return {
@@ -474,14 +465,12 @@ function update(dt) {
   S.now = now;
   const me = S.me;
 
-  // Welt-Skalierung (Presence → Zielgröße, weiche Animation)
   if (now - (S.lastScale || 0) >= 1000) {
     S.lastScale = now;
     World.setTarget(Net.roster().length);
   }
   World.update(dt);
 
-  // Eingabe: Bewegung
   const mv = Input.moveVector();
   const speed = CFG.SPEED;
   if (S.state === 'playing' && me.alive) {
@@ -490,12 +479,10 @@ function update(dt) {
       me.y += mv.y * speed * dt;
       resolveEntity(me);
     }
-    // Im wegfallenden Randbereich sanft nach innen schieben
     me.x = clamp(me.x, CFG.R, World.w - CFG.R);
     me.y = clamp(me.y, CFG.R, World.h - CFG.R);
   }
 
-  // Eingabe: Zielen & Schiessen
   const aim = Input.aimInfo();
   let fire = false;
   if (S.state === 'playing' && me.alive) {
@@ -511,7 +498,6 @@ function update(dt) {
       if (dist(me.x, me.y, w.x, w.y) > 8) me.angle = Math.atan2(w.y - me.y, w.x - me.x);
       fire = aim.active;
     } else if (aim.source === 'key') {
-      // Tastatur ohne Maus: Blickrichtung = Bewegungsrichtung, Leertaste schießt
       if (mv.mag > 0) me.angle = Math.atan2(mv.y, mv.x);
       fire = true;
     } else if (mv.mag > 0) {
@@ -520,7 +506,6 @@ function update(dt) {
   }
   if (fire) tryFire(now);
 
-  // Nachgeladen → Magazin wieder befüllen + deutliche Anzeige
   if (me.reloadUntil && now >= me.reloadUntil) {
     const RW = WEAPONS[me.reloadW] || WEAPONS[me.weapon];
     if (RW.ammoMax && me.slots.includes(RW.key)) me.ammo[RW.key] = RW.ammoMax;
@@ -532,14 +517,12 @@ function update(dt) {
     Sfx.play('reloadDone');
   }
 
-  // Spielwelt
   updateBullets(dt);
   if (S.state === 'playing') {
     updatePowerups();
     if (!me.alive && now >= me.deadUntil) respawnMe();
   }
 
-  // Abläufe / Decay
   if (me.shieldUntil && now > me.shieldUntil) { me.shield = 0; me.shieldUntil = 0; }
   me.muzzle = Math.max(0, me.muzzle - dt);
   me.flash = Math.max(0, me.flash - dt);
@@ -547,11 +530,20 @@ function update(dt) {
   S.dmgFlash = Math.max(0, S.dmgFlash - dt * 1.6);
   S.shake = Math.max(0, S.shake - dt * 26);
 
-  // Remote-Interpolation
+  // Remote-Interpolation & automatisches Aufräumen inaktiver Spieler
   const ki = 1 - Math.exp(-dt * 14);
   const ka = 1 - Math.exp(-dt * 12);
+  const st = Net.channel ? Net.channel.presenceState() : {};
+
   for (const id of Object.keys(S.remotes)) {
     const r = S.remotes[id];
+
+    // Entfernen, wenn der Spieler nicht mehr in Presence ist ODER seit 6 Sekunden gar nichts mehr gesendet hat
+    if (!st[id] || (now - r.last > 6000)) {
+      delete S.remotes[id];
+      continue;
+    }
+
     r.x += (r.tx - r.x) * ki;
     r.y += (r.ty - r.y) * ki;
     if (r.ta != null) r.angle = lerpAngle(r.angle, r.ta, ka);
@@ -560,7 +552,6 @@ function update(dt) {
     r.stale = now - r.last > CFG.STALE_MS;
   }
 
-  // Partikel
   for (let i = S.particles.length - 1; i >= 0; i--) {
     const p = S.particles[i];
     p.life -= dt;
@@ -574,7 +565,6 @@ function update(dt) {
 
   updateCamera(dt);
 
-  // Netzwerk senden
   if (S.state === 'playing' && (now - S.lastNet >= CFG.NET_MS || me.dirty)) {
     S.lastNet = now;
     me.dirty = false;
@@ -655,7 +645,7 @@ function onPickup(p) {
   if (p.r <= pu.respawns && p.t <= pu.hiddenUntil) return;
   pu.respawns = p.r;
   pu.hiddenUntil = p.t;
-  if (p.nextType) pu.type = p.nextType; // Typ mit anderen Spielern synchronisieren
+  if (p.nextType) pu.type = p.nextType;
   sparkAt(pu.x, pu.y, PU_INFO[pu.type].color, 10);
 }
 
@@ -686,7 +676,6 @@ function onSyncAns(p) {
   if (p.dr) adoptDrops(p.dr);
 }
 
-// Drops für Spät-Azmeister übernehmen (nur neue, eigene nie überschreiben)
 function adoptDrops(rows) {
   for (const r of rows) {
     const d = { id: r[0], w: r[1], x: r[2], y: r[3] };
@@ -699,11 +688,11 @@ function onPresence() {
   if (!Net.channel) return;
   const st = Net.channel.presenceState();
   for (const id of Object.keys(S.remotes)) {
-    if (!st[id] && S.now - S.remotes[id].last > 2000) delete S.remotes[id];
+    if (!st[id]) delete S.remotes[id];
   }
 }
 
-// ---------------- Public API (UI ruft das an) ----------------
+// ---------------- Public API ----------------
 
 const Game = {
   init() {
@@ -760,7 +749,6 @@ const Game = {
     UI.syncWeaponChips();
   },
 
-  // Manuelles Nachladen (R): aktive Waffe mit Magazin wieder befüllen
   reload() {
     const me = S.me;
     if (S.state !== 'playing' || !me.alive) return;
@@ -775,7 +763,6 @@ const Game = {
     UI.syncWeaponChips();
   },
 
-  // Taste 1..2 → Slot n
   setWeaponBySlot(n) {
     const w = S.me.slots[n - 1];
     if (w) Game.setWeapon(w);
