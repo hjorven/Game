@@ -1,4 +1,4 @@
-// js/game.js — Spielzustand, Logik, Netzwerk-Handler
+// js/game.js — Spielzustand, Logik, Netzwerk-Handler (inkl. Dash & Map-Vote)
 'use strict';
 
 const S = {
@@ -14,12 +14,15 @@ const S = {
     protectUntil: 0, shieldUntil: 0, deadUntil: 0,
     lastShot: 0, muzzle: 0, flash: 0, dirty: false,
     reloadUntil: 0,    // Zeitpunkt, ab dem die aktuelle Waffe nachgeladen ist (0 = nicht laden)
+    dashUntil: 0,      // Ende des aktuellen Dashs
+    dashCd: 0,         // Cooldown bis zum nächsten Dash
   },
   remotes: {},
   bullets: [],
   particles: [],
   powerups: [],
   drops: [],        // Waffen-Drops vom Tod anderer Spieler
+  mapVotes: new Set(), // IDs der Spieler, die für einen Map-Reset gestimmt haben
   seenExplosions: new Set(),
   cam: { x: 600, y: 200, scale: 1 },
   shake: 0, hitmarker: 0, dmgFlash: 0,
@@ -110,6 +113,48 @@ function explosionFx(x, y, radius) {
   }
   S.shake = Math.min(14, S.shake + 9);
   Sfx.play('explode');
+}
+
+// ---------------- Dash & Map-Vote ----------------
+
+function tryDash(now) {
+  const me = S.me;
+  if (S.state !== 'playing' || !me.alive || now < me.dashCd) return;
+  me.dashUntil = now + 180;
+  me.dashCd = now + 2500;
+  Sfx.play('dash');
+}
+
+function toggleMapVote() {
+  if (S.state !== 'playing') return;
+  const voted = S.mapVotes.has(MY_ID);
+  if (voted) {
+    S.mapVotes.delete(MY_ID);
+  } else {
+    S.mapVotes.add(MY_ID);
+  }
+  Net.send('map_vote', { id: MY_ID, vote: !voted });
+  checkMapVoteCount();
+}
+
+function checkMapVoteCount() {
+  const totalPlayers = Object.keys(S.remotes).length + 1;
+  const votesNeeded = Math.floor(totalPlayers / 2) + 1;
+
+  UI.setNotice(`Map-Vote: ${S.mapVotes.size}/${votesNeeded} Stimmen`, 1500);
+
+  if (S.mapVotes.size >= votesNeeded && Net.syncAnswerer() === MY_ID) {
+    const newSeed = Math.floor(Math.random() * 0xffffff);
+    Net.send('reseed', { seed: newSeed });
+    applyNewSeed(newSeed);
+  }
+}
+
+function applyNewSeed(seed) {
+  if (typeof World.reseed === 'function') World.reseed(seed);
+  S.mapVotes.clear();
+  UI.setNotice('Map neu generiert!', 2500);
+  Sfx.play('start');
 }
 
 // ---------------- Schüsse ----------------
@@ -487,6 +532,7 @@ function startGameState() {
   me.dirty = true;
   S.bullets.length = 0;
   S.seenExplosions.clear();
+  S.mapVotes.clear();
   UI.enterGame();
   UI.syncWeaponChips();
   UI.setNotice('VIEL ERFOLG!', 2000);
@@ -519,8 +565,19 @@ function update(dt) {
   World.update(dt);
 
   const mv = Input.moveVector();
-  const speed = CFG.SPEED;
+  let speed = CFG.SPEED;
+
   if (S.state === 'playing' && me.alive) {
+    // Dash-Geschwindigkeits-Boost & Partikel
+    if (now < me.dashUntil) {
+      speed *= 2.8;
+      addP({
+        x: me.x, y: me.y,
+        vx: (Math.random() - 0.5) * 40, vy: (Math.random() - 0.5) * 40,
+        life: 0.2, maxLife: 0.2, color: '#71717a', size: 4
+      });
+    }
+
     if (mv.mag > 0) {
       me.x += mv.x * speed * dt;
       me.y += mv.y * speed * dt;
@@ -723,6 +780,18 @@ function onSyncAns(p) {
   if (p.dr) adoptDrops(p.dr);
 }
 
+function onMapVote(p) {
+  if (!p || !p.id) return;
+  if (p.vote) S.mapVotes.add(p.id);
+  else S.mapVotes.delete(p.id);
+  checkMapVoteCount();
+}
+
+function onReseed(p) {
+  if (!p || !p.seed) return;
+  applyNewSeed(p.seed);
+}
+
 function adoptDrops(rows) {
   for (const r of rows) {
     const d = { id: r[0], w: r[1], x: r[2], y: r[3] };
@@ -759,12 +828,16 @@ const Game = {
     Input.init(canvas);
     Input.onWeaponSlot = (n) => Game.setWeaponBySlot(n);
     Input.onReload = () => Game.reload();
+    if (typeof Input.onDash === 'function') Input.onDash = () => Game.tryDash();
+    if (typeof Input.onMapVote === 'function') Input.onMapVote = () => Game.toggleMapVote();
     Net.init();
     requestAnimationFrame(frame);
   },
 
   update,
-  onMove, onShoot, onExplode, onHit, onDeath, onPickup, onDrop, onDropGone, onSyncReq, onSyncAns, onPresence,
+  tryDash() { tryDash(S.now); },
+  toggleMapVote,
+  onMove, onShoot, onExplode, onHit, onDeath, onPickup, onDrop, onDropGone, onSyncReq, onSyncAns, onPresence, onMapVote, onReseed,
 
   setName(n) {
     n = (n || '').trim().slice(0, CFG.NAME_MAX);
