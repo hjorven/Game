@@ -76,3 +76,12 @@ const colorForId = (id) => {
   for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
   return PALETTE[h % PALETTE.length];
 };
+function getRandomPUType() {
+  const r = Math.random() * 100;
+  let acc = 0;
+  for (const [type, w] of PU_WEIGHTS) {
+    acc += w;
+    if (r < acc) return type;
+  }
+  return 'health';
+}
