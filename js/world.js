@@ -103,16 +103,6 @@ const World = (() => {
       }
     }
   }
-    puSlots.length = 0;
-    const want = clamp(Math.round(size * size / 480000), 6, 16);
-    if (spawns.length) {
-      for (let i = 0; i < want; i++) {
-        const idx = Math.floor((i + 0.5) * spawns.length / want) % spawns.length;
-        const s = spawns[idx];
-        puSlots.push({ x: s.x, y: s.y, type: slotTypeFor(i) });
-      }
-    }
-  }
 
   // Neue Chunks außen dazu generieren – bestehende bleiben unverändert
   function ensureGen() {
@@ -144,33 +134,4 @@ const World = (() => {
   function inWall(x, y) {
     const list = chunks.get(key(Math.floor(x / CHUNK), Math.floor(y / CHUNK)));
     if (!list) return false;
-    for (const wl of list) if (x >= wl.x && x <= wl.x + wl.w && y >= wl.y && y <= wl.y + wl.h) return true;
-    return false;
-  }
-
-  // Wände im 3x3-Umfeld (Hindernisse bleiben in ihrem Chunk, Rand = MARGIN > CFG.R)
-  function nearWalls(x, y) {
-    const cx = Math.floor(x / CHUNK), cy = Math.floor(y / CHUNK);
-    const out = [];
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        const list = chunks.get(key(cx + dx, cy + dy));
-        if (list) for (const wl of list) out.push(wl);
-      }
-    }
-    return out;
-  }
-
-  ensureGen();
-
-  return {
-    get w() { return size; },
-    get h() { return size; },
-    get target() { return target; },
-    get walls() { return walls; },
-    get spawns() { return spawns; },
-    get puSlots() { return puSlots; },
-    setTarget, update, inWall, nearWalls,
-    chunkKey: key, CHUNK,
-  };
-})();
+    for (const wl of list) if (x >= wl.x &&
