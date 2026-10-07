@@ -1,29 +1,5 @@
 # ARENA – 2D Top-Down Multiplayer Shooter
 
-Ein Free-for-all Shooter im Brawl-Stars-Stil, komplett im Browser lauffähig:
-HTML5-Canvas + Supabase Realtime. Läuft auf iPad (Touch), Handy und PC –
-gehostet kostenlos über GitHub Pages.
-
-**Live-Demo:** [hjorven.github.io/Game/](https://hjorven.github.io/Game/)
-
-## Features
-
-- **Eine große Welt für alle:** Seite öffnen → Namen eingeben → „Spielen" → sofort
-  loslegen. Kein Lobby-/Raum-System, kein Match-Ende, kein Host.
-- **Welt skaliert mit der Spielerzahl** (weiche Animation, quadratisch, 1600–6000 px)
-- **Deterministische Seed-Welt:** gleiche Hindernisse/Spawns/Loot auf allen Clients,
-  neue Chunks entstehen nur außen dazu
-- **Loot:** Heilung (+50 HP), Schild, Munition und Waffen-Kisten
-  (Schrotflinte, Sniper, Raketenwerfer) – seltene Waffen seltener, längere Respawn-Zeit
-- **2 Waffen-Slots:** Pistole (unbegrenzt) als Start, Kiste füllt den freien Slot,
-  bei vollen Slots ersetzt sie die aktuelle Waffe; Umschalten mit `1`/`2`
-- **Tod → Waffe droppt** am Todestort (andere können sie aufheben),
-  Respawn nach 3 s nur mit Pistole
-- **Dual-Stick-Steuerung** für Touch (linker Daumen Bewegen, rechter Zielen & Schiessen,
-  Antippen aufs Ziel = gezielter Schuss) – am PC mit WASD + Maus
-- **Spawn-Schutz, Killfeed, Live-Tabelle (Tab), Minimap, Kamera-Follow, Screen-Shake**
-- **WebAudio-Sounds** ohne externe Dateien (Mute-Button)
-
 ## Steuerung
 
 | Aktion | PC | iPad / Handy |
