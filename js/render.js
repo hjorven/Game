@@ -34,32 +34,32 @@ const Render = {
   },
 
   frame() {
-  const ctx = this.ctx, dpr = this.dpr;
-  const shx = (Math.random() - 0.5) * S.shake;
-  const shy = (Math.random() - 0.5) * S.shake;
+    const ctx = this.ctx, dpr = this.dpr;
+    const shx = (Math.random() - 0.5) * S.shake;
+    const shy = (Math.random() - 0.5) * S.shake;
 
-  const sc = S.cam.scale;
-  ctx.setTransform(dpr * sc, 0, 0, dpr * sc,
-    dpr * (this.w / 2 - S.cam.x * sc + shx),
-    dpr * (this.h / 2 - S.cam.y * sc + shy));
+    const sc = S.cam.scale;
+    ctx.setTransform(dpr * sc, 0, 0, dpr * sc,
+      dpr * (this.w / 2 - S.cam.x * sc + shx),
+      dpr * (this.h / 2 - S.cam.y * sc + shy));
 
-  this.drawFloor(ctx);
-  this.drawWalls(ctx);
-  this.drawGrenadePreview(ctx); // <--- Neu: Vorschau-Linie & Zielkreis
-  this.drawPowerups(ctx);
-  this.drawDrops(ctx);
-  this.drawBullets(ctx);
-  for (const r of Object.values(S.remotes)) this.drawPlayer(ctx, r, false);
-  this.drawPlayer(ctx, S.me, true);
-  this.drawParticles(ctx);
-  this.drawHitmarker(ctx);
+    this.drawFloor(ctx);
+    this.drawWalls(ctx);
+    this.drawGrenadePreview(ctx);
+    this.drawPowerups(ctx);
+    this.drawDrops(ctx);
+    this.drawBullets(ctx);
+    for (const r of Object.values(S.remotes)) this.drawPlayer(ctx, r, false);
+    this.drawPlayer(ctx, S.me, true);
+    this.drawParticles(ctx);
+    this.drawHitmarker(ctx);
 
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  this.drawTapAim(ctx);
-  this.drawMinimap(ctx);
-  this.drawSticks(ctx);
-  this.drawVignette(ctx);
-},
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.drawTapAim(ctx);
+    this.drawMinimap(ctx);
+    this.drawSticks(ctx);
+    this.drawVignette(ctx);
+  },
 
   drawFloor(ctx) {
     const W = World.w, H = World.h;
@@ -138,7 +138,6 @@ const Render = {
     }
   },
 
-  // Vom Tod gefallene Waffen
   drawDrops(ctx) {
     const now = S.now;
     for (const d of S.drops) {
@@ -164,48 +163,47 @@ const Render = {
   },
 
   drawBullets(ctx) {
-  for (const b of S.bullets) {
-    if (b.isArc) {
-      // Schatten am Boden
-      ctx.fillStyle = 'rgba(0,0,0,0.35)';
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.size * 0.8, 0, Math.PI * 2); ctx.fill();
+    for (const b of S.bullets) {
+      if (b.isArc) {
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.size * 0.8, 0, Math.PI * 2); ctx.fill();
 
-      // Fliegende Granate mit Höhenversatz (b.z)
-      const drawY = b.y - (b.z || 0);
-      ctx.fillStyle = 'rgba(255,140,60,0.5)';
-      ctx.beginPath(); ctx.arc(b.x, drawY, b.size + 3, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = b.color;
-      ctx.beginPath(); ctx.arc(b.x, drawY, b.size, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.beginPath(); ctx.arc(b.x, drawY, b.size - 2, 0, Math.PI * 2); ctx.fill();
-    } else if (b.w === 'sniper') {
-      ctx.strokeStyle = b.color;
-      ctx.lineWidth = b.size;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(b.x - b.vx * 0.022, b.y - b.vy * 0.022);
-      ctx.lineTo(b.x, b.y);
-      ctx.stroke();
-      ctx.strokeStyle = '#ffffff';
-      ctx.lineWidth = Math.max(1, b.size - 3);
-      ctx.stroke();
-    } else if (b.splash) {
-      ctx.fillStyle = 'rgba(255,140,60,0.5)';
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.size + 4, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = b.color;
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#ffe0b2';
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.size - 3, 0, Math.PI * 2); ctx.fill();
-    } else {
-      ctx.globalAlpha = 0.35;
-      ctx.fillStyle = b.color;
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.size * 2, 0, Math.PI * 2); ctx.fill();
-      ctx.globalAlpha = 1;
-      ctx.fillStyle = '#fffde7';
-      ctx.beginPath(); ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2); ctx.fill();
+        const drawY = b.y - (b.z || 0);
+        ctx.fillStyle = 'rgba(255,140,60,0.5)';
+        ctx.beginPath(); ctx.arc(b.x, drawY, b.size + 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = b.color;
+        ctx.beginPath(); ctx.arc(b.x, drawY, b.size, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.arc(b.x, drawY, b.size - 2, 0, Math.PI * 2); ctx.fill();
+      } else if (b.w === 'sniper') {
+        ctx.strokeStyle = b.color;
+        ctx.lineWidth = b.size;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(b.x - b.vx * 0.022, b.y - b.vy * 0.022);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = Math.max(1, b.size - 3);
+        ctx.stroke();
+      } else if (b.splash) {
+        ctx.fillStyle = 'rgba(255,140,60,0.5)';
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.size + 4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = b.color;
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#ffe0b2';
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.size - 3, 0, Math.PI * 2); ctx.fill();
+      } else {
+        ctx.globalAlpha = 0.35;
+        ctx.fillStyle = b.color;
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.size * 2, 0, Math.PI * 2); ctx.fill();
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#fffde7';
+        ctx.beginPath(); ctx.arc(b.x, b.y, b.size, 0, Math.PI * 2); ctx.fill();
+      }
     }
-  }
-},
+  },
+
   drawPlayer(ctx, p, isMe) {
     const R = CFG.R;
     if (!p.alive) {
@@ -229,13 +227,11 @@ const Render = {
     ctx.save();
     ctx.translate(p.x, p.y);
 
-    // Schatten
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
     ctx.beginPath(); ctx.ellipse(2, 6, R, R * 0.75, 0, 0, Math.PI * 2); ctx.fill();
 
     ctx.save();
     ctx.rotate(p.angle);
-    // Waffe
     ctx.fillStyle = '#cfd8dc';
     ctx.fillRect(3, -3.5, barrel, 7);
     ctx.fillStyle = '#78909c';
@@ -253,7 +249,6 @@ const Render = {
     }
     ctx.restore();
 
-    // Körper
     ctx.beginPath(); ctx.arc(0, 0, R, 0, Math.PI * 2);
     ctx.fillStyle = body; ctx.fill();
     ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.stroke();
@@ -281,7 +276,6 @@ const Render = {
     }
     ctx.restore();
 
-    // Namenszug + HP
     const hpRatio = clamp(p.hp / CFG.MAX_HP, 0, 1);
     const bw = 44;
     const bx = p.x - bw / 2, by = p.y - R - 18;
@@ -447,63 +441,61 @@ const Render = {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, this.w, this.h);
   },
+
+  drawGrenadePreview(ctx) {
+    const me = S.me;
+    if (S.state !== 'playing' || !me.alive) return;
+    const W = WEAPONS[me.weapon];
+    if (!W || !W.isArc) return;
+
+    const aim = Input.aimInfo();
+    let targetDist = W.maxRange || 350;
+    if ((aim.source === 'mouse' || aim.source === 'tap') && aim.screen) {
+      const wPos = this.screenToWorld(aim.screen.x, aim.screen.y);
+      const d = dist(me.x, me.y, wPos.x, wPos.y);
+      targetDist = Math.min(d, W.maxRange || 350);
+    }
+
+    const bx = me.x + Math.cos(me.angle) * (CFG.R + 10);
+    const by = me.y + Math.sin(me.angle) * (CFG.R + 10);
+    const tx = bx + Math.cos(me.angle) * targetDist;
+    const ty = by + Math.sin(me.angle) * targetDist;
+
+    ctx.save();
+    ctx.strokeStyle = 'rgba(156,204,101,0.65)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 6]);
+    ctx.beginPath();
+    ctx.moveTo(bx, by);
+
+    const steps = 15;
+    for (let i = 1; i <= steps; i++) {
+      const t = i / steps;
+      const px = bx + (tx - bx) * t;
+      const py = by + (ty - by) * t;
+      const pz = Math.sin(t * Math.PI) * 45;
+      ctx.lineTo(px, py - pz);
+    }
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const splashR = W.splash || 90;
+    ctx.fillStyle = 'rgba(255, 90, 90, 0.15)';
+    ctx.strokeStyle = 'rgba(255, 90, 90, 0.7)';
+    ctx.lineWidth = 2;
+
+    ctx.beginPath();
+    ctx.arc(tx, ty, splashR, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.strokeStyle = '#ff5a5a';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(tx - 8, ty); ctx.lineTo(tx + 8, ty);
+    ctx.moveTo(tx, ty - 8); ctx.lineTo(tx, ty + 8);
+    ctx.stroke();
+
+    ctx.restore();
+  }
 };
-drawGrenadePreview(ctx) {
-  const me = S.me;
-  if (S.state !== 'playing' || !me.alive) return;
-  const W = WEAPONS[me.weapon];
-  if (!W || !W.isArc) return;
-
-  const aim = Input.aimInfo();
-  let targetDist = W.maxRange || 350;
-  if ((aim.source === 'mouse' || aim.source === 'tap') && aim.screen) {
-    const wPos = this.screenToWorld(aim.screen.x, aim.screen.y);
-    const d = dist(me.x, me.y, wPos.x, wPos.y);
-    targetDist = Math.min(d, W.maxRange || 350);
-  }
-
-  const bx = me.x + Math.cos(me.angle) * (CFG.R + 10);
-  const by = me.y + Math.sin(me.angle) * (CFG.R + 10);
-  const tx = bx + Math.cos(me.angle) * targetDist;
-  const ty = by + Math.sin(me.angle) * targetDist;
-
-  ctx.save();
-  ctx.strokeStyle = 'rgba(156,204,101,0.65)';
-  ctx.lineWidth = 2;
-  ctx.setLineDash([6, 6]);
-  ctx.beginPath();
-  ctx.moveTo(bx, by);
-
-  // Parabel-Bogen zeichnen
-  const steps = 15;
-  for (let i = 1; i <= steps; i++) {
-    const t = i / steps;
-    const px = bx + (tx - bx) * t;
-    const py = by + (ty - by) * t;
-    const pz = Math.sin(t * Math.PI) * 45;
-    ctx.lineTo(px, py - pz);
-  }
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  // Landezone / Sprengradius
-  const splashR = W.splash || 90;
-  ctx.fillStyle = 'rgba(255, 90, 90, 0.15)';
-  ctx.strokeStyle = 'rgba(255, 90, 90, 0.7)';
-  ctx.lineWidth = 2;
-
-  ctx.beginPath();
-  ctx.arc(tx, ty, splashR, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-
-  // Zielkreuz
-  ctx.strokeStyle = '#ff5a5a';
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(tx - 8, ty); ctx.lineTo(tx + 8, ty);
-  ctx.moveTo(tx, ty - 8); ctx.lineTo(tx, ty + 8);
-  ctx.stroke();
-
-  ctx.restore();
-}
