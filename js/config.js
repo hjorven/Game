@@ -32,6 +32,9 @@ const WEAPONS = {
   pistol:  { key: 'pistol',  name: 'Pistole',        short: 'PIST', slot: 1, dmg: 14, spd: 900,  rate: 240,  spread: 0.04,  pel: 1, size: 4,   life: 1.2,  color: '#ffd54a' },
   shotgun: { key: 'shotgun', name: 'Schrotflinte',   short: 'SG',   slot: 2, dmg: 10, spd: 800,  rate: 720,  spread: 0.24,  pel: 5, size: 3.5, life: 0.55, color: '#ff9a3c', ammoMax: 24, reloadMs: 1600 },
   sniper:  { key: 'sniper',  name: 'Sniper',         short: 'SNIP', slot: 3, dmg: 50, spd: 1700, rate: 1100, spread: 0.006, pel: 1, size: 5,   life: 1.4,  color: '#7fdcff', ammoMax: 12, reloadMs: 1900 },
+  smg:     { key: 'smg',     name: 'Maschinenpistole', short: 'SMG', slot: 5, dmg: 8,  spd: 950,  rate: 85,   spread: 0.10,  pel: 1, size: 3,   life: 0.8,  color: '#b388ff', ammoMax: 45, reloadMs: 1500 },
+  magnum:  { key: 'magnum',  name: 'Magnum',         short: 'MAG',  slot: 6, dmg: 36, spd: 1200, rate: 560,  spread: 0.015, pel: 1, size: 5,   life: 1.0,  color: '#ff80ab', ammoMax: 6,  reloadMs: 1700 },
+  grenade: { key: 'grenade', name: 'Granatwerfer',   short: 'GRN',  slot: 7, dmg: 45, spd: 420,  rate: 900,  spread: 0,     pel: 1, size: 6,   life: 1.1,  color: '#9ccc65', splash: 90, ammoMax: 8, reloadMs: 2000 },
   rocket:  { key: 'rocket',  name: 'Raketenwerfer',  short: 'RAK',  slot: 4, dmg: 60, spd: 540,  rate: 1500, spread: 0,     pel: 1, size: 7,   life: 2.2,  color: '#ff5a5a', splash: 120, ammoMax: 6, reloadMs: 2300 },
 };
 
@@ -40,8 +43,9 @@ const WEAPONS = {
 // Loot: feste Typ-Zuordnung pro Seed-Slot (js/world.js: slotTypeFor)
 // Gewichte: Items häufig, seltene Waffen selten (Summe 100)
 const PU_WEIGHTS = [
-  ['health', 30], ['shield', 20], ['ammo', 20],
-  ['weapon_shotgun', 14], ['weapon_sniper', 10], ['weapon_rocket', 6],
+  ['health', 26], ['shield', 17], ['ammo', 17],
+  ['weapon_shotgun', 11], ['weapon_smg', 9], ['weapon_magnum', 7],
+  ['weapon_sniper', 6], ['weapon_grenade', 4], ['weapon_rocket', 3],
 ];
 const PU_INFO = {
   health:         { label: '+HP',  color: '#69f0ae' },
@@ -49,6 +53,9 @@ const PU_INFO = {
   ammo:           { label: 'AMMO', color: '#ffee58' },
   weapon_shotgun: { label: 'SG',   color: '#ff9a3c' },
   weapon_sniper:  { label: 'SNIP', color: '#7fdcff' },
+  weapon_smg:     { label: 'SMG',  color: '#b388ff' },
+  weapon_magnum:  { label: 'MAG',  color: '#ff80ab' },
+  weapon_grenade: { label: 'GRN',  color: '#9ccc65' },
   weapon_rocket:  { label: 'RAK',  color: '#ff5a5a' },
 };
 
