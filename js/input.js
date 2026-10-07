@@ -1,4 +1,4 @@
-// js/input.js — Tastatur, Maus, virtuelle Joysticks (Touch/Apple Pencil)
+// js/input.js — Tastatur, Maus, virtuelle Joysticks & Touch-Buttons
 'use strict';
 
 const Input = {
@@ -11,6 +11,8 @@ const Input = {
   canvas: null,
   onWeaponSlot: null, // wird von Game gesetzt
   onReload: null,     // wird von Game gesetzt
+  onDash: null,       // wird von Game gesetzt
+  onMapVote: null,    // wird von Game gesetzt
 
   STICK_R: 62,        // visueller Radius
   STICK_DEAD: 10,     // Totzone in px
@@ -70,13 +72,25 @@ const Input = {
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return; // Tippen nicht stören
       Sfx.resume();
       const k = e.key.toLowerCase();
+
+      // Trigger nur beim ersten Drücken (kein Autorepeat-Spam)
+      if (!this.keys[k]) {
+        if ((k === ' ' || k === 'shift') && this.onDash) {
+          this.onDash();
+        }
+        if (k === 'v' && this.onMapVote) {
+          this.onMapVote();
+        }
+      }
+
       this.keys[k] = true;
-      if (k === ' ') e.preventDefault();
+      if (k === ' ' || k === 'shift') e.preventDefault();
       if (k >= '1' && k <= '2' && this.onWeaponSlot) this.onWeaponSlot(+k);
       if (k === 'r' && this.onReload) this.onReload();
       if (k === 'tab') { e.preventDefault(); UI.toggleBoard(); }
       if (k === 'm' && UI.toggleMute) UI.toggleMute();
     });
+
     window.addEventListener('keyup', (e) => { this.keys[e.key.toLowerCase()] = false; });
     window.addEventListener('blur', () => {
       this.keys = {};
@@ -88,6 +102,27 @@ const Input = {
     // iOS Safari: Pinch-Zoom / Frame-Gesten unterdrücken
     document.addEventListener('gesturestart', (e) => e.preventDefault());
     document.addEventListener('dblclick', (e) => e.preventDefault());
+
+    // Touchscreen-Buttons einbinden
+    this.bindTouchButtons();
+  },
+
+  bindTouchButtons() {
+    const bind = (id, fn) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const handler = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        Sfx.resume();
+        fn();
+      };
+      el.addEventListener('pointerdown', handler);
+      el.addEventListener('touchstart', handler, { passive: false });
+    };
+
+    bind('btnDash', () => { if (this.onDash) this.onDash(); });
+    bind('btnVote', () => { if (this.onMapVote) this.onMapVote(); });
   },
 
   newStick(e) {
@@ -135,11 +170,7 @@ const Input = {
       return { source: 'tap', screen: this.tapAim, active: true, mag: 1 };
     }
     if (this.mouse.has) {
-      return { source: 'mouse', screen: this.mouse, active: this.mouse.down || !!this.keys[' '], mag: 1 };
-    }
-    // Nur Tastatur (keine Maus benutzt): halte Leertaste zum Schiessen
-    if (this.keys[' ']) {
-      return { source: 'key', active: true, mag: 1 };
+      return { source: 'mouse', screen: this.mouse, active: this.mouse.down, mag: 1 };
     }
     return { source: 'none', active: false, mag: 0 };
   },
