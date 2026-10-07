@@ -177,7 +177,7 @@ const Render = {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = Math.max(1, b.size - 3);
         ctx.stroke();
-      } else if (b.w === 'rocket') {
+      } else if (b.splash) {
         ctx.fillStyle = 'rgba(255,140,60,0.5)';
         ctx.beginPath(); ctx.arc(b.x, b.y, b.size + 4, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = b.color;
